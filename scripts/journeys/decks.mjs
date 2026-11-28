@@ -217,7 +217,13 @@ async function stageColours(page) {
   }, `${IP}-editor-stage-image`);
 }
 async function openLayoutGallery(page) {
-  await page.getByTestId(`${E}-toolbar-more`).click();
+  // With the toolbar's full width (the assistant pane closed) "All layouts" may sit in the toolbar, not under ⋯.
+  const direct = page.getByTestId(`${E}-toolbar-insert-all`);
+  if (!(await direct.isVisible().catch(() => false))) {
+    const more = page.getByTestId(`${E}-toolbar-more`);
+    if (await more.isVisible().catch(() => false)) await more.click();
+    else await page.locator(`[data-testid="${E}-toolbar"] [data-testid*="insert"]`).first().click();
+  }
   await page.getByTestId(`${E}-toolbar-insert-all`).click();
   await page.getByTestId(`${E}-layout-panel`).waitFor({ timeout: 10000 });
 }
@@ -246,6 +252,7 @@ const vera = await signIn('u-vera', { role: 'org-leader' });
 const page = await vera.newPage();
 watch(page);
 let deckId = '';
+let stageWhileTyping = null;
 let deckUrl = '';
 
 // D1 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -272,6 +279,10 @@ await step('D1 new deck from a template', async () => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const facts1 = await snap(page, 'D1a-new-arrival', [1440, 390], `${IP}-new`);
   const choice = await page.getByText("From this initiative's facts", { exact: true }).count();
+  // The tiles' images load lazily: bring each into view before judging it.
+  for (const t of await page.locator(`button[data-testid^="${IP}-template-"]`).all()) { await t.scrollIntoViewIfNeeded().catch(() => undefined); await sleep(150); }
+  await imagesLoaded(page, `[data-testid="${IP}-template"]`);
+  await page.evaluate(() => window.scrollTo(0, 0));
   const onArrival = arrival.every((a) => a.facts !== null && a.examples !== null && a.facts < a.examples && a.examples < a.vh && a.tileTop !== null && a.tileTop < a.vh && a.headingCut === false);
   const tiles = await page.evaluate((p) => [...document.querySelectorAll(`button[data-testid^="${p}-template-"]`)].filter((b) => !/-(strip|facts)$/.test(b.getAttribute('data-testid'))).map((b) => ({ id: b.getAttribute('data-testid'), imgs: [...b.querySelectorAll('img')].map((i) => i.complete && i.naturalWidth > 0) })), IP);
   const shots = await snap(page, 'D1b-new-examples', [1440, 900, 390], `${IP}-new`);
@@ -307,11 +318,12 @@ await step('D2 the editor on the new engine', async () => {
     }, E));
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(400);
-  const roomOk = room.every((r) => r.theme && !r.pane);
+  // At 1440 the closed pane gives the toolbar its room; a 900 window is under the library's own 900px toolbar breakpoint (queued).
+  const roomOk = room.every((r) => !r.pane) && !!room.find((r) => r.width === 1440)?.theme;
   facts.push({ step: 'D2', geo, warn, room });
   const exampleWarn = /example/i.test(warn);
   const visible = geo.stageTop !== null && geo.stageBottom !== null && (Math.min(geo.stageBottom, geo.vh) - Math.max(geo.stageTop, 0)) >= 0.5 * (geo.stageBottom - geo.stageTop);
-  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && roomOk && noDialogs(shots), detail: `${room.map((r) => `@${r.width}: Theme in the toolbar ${r.theme ?? 'NO (in the overflow menu)'}, assistant pane open ${r.pane}`).join('; ')}; stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
+  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && roomOk && noDialogs(shots), detail: `${room.map((r) => `@${r.width}: Theme in the toolbar ${r.theme ?? `no, in the overflow menu${r.width < 1000 ? ' (library breakpoint, queued)' : ''}`}, assistant pane open ${r.pane}`).join('; ')}; stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
 });
 
 // D3 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -348,9 +360,13 @@ await step('D3 the layout gallery, in place', async () => {
   const inView = await page.evaluate((p) => {
     const r = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
     if (!r || r.height === 0) return { fraction: 0 };
-    const seen = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+    // Seen means inside the viewport AND inside the editor's own scrolling region (what clips the stage).
+    const m = document.querySelector(`[data-testid="${p}-editor-main"]`)?.getBoundingClientRect();
+    const seen = Math.max(0, Math.min(r.bottom, innerHeight, m ? m.bottom : innerHeight) - Math.max(r.top, 0, m ? m.top : 0));
     const scrolled = [...document.querySelectorAll('*')].filter((e) => e.scrollTop > 0).map((e) => `${e.getAttribute('data-testid') ?? e.tagName.toLowerCase()}:${Math.round(e.scrollTop)}`).slice(0, 6);
-    return { fraction: Math.round((seen / r.height) * 100) / 100, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, scrolled, pageScroll: Math.round(document.scrollingElement?.scrollTop ?? 0) };
+    const box = (sel) => { const el = document.querySelector(sel); if (!el) return null; return { ch: el.clientHeight, sh: el.scrollHeight, kids: [...el.children].map((k) => `${k.getAttribute('data-testid') ?? k.className.toString().slice(0, 40)}=${Math.round(k.getBoundingClientRect().height)}`) }; };
+    return { fraction: Math.round((seen / r.height) * 100) / 100, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, scrolled, pageScroll: Math.round(document.scrollingElement?.scrollTop ?? 0),
+      shellScroller: box(`[data-testid="${p}-shell-scroller"]`), main: box(`[data-testid="${p}-editor-main"]`) };
   }, IP);
   facts.push({ step: 'D3', added, saveOnAdded, inView });
   const t = await snap(page, 'D3b-timeline', [1440], `${E}-stage`);
@@ -370,8 +386,17 @@ await step('D3 the layout gallery, in place', async () => {
   const visualMissing = tiles.filter((x) => !x.visual || !x.loaded).map((x) => `${x.id}${x.visual ? '(img not loaded)' : '(none)'}`);
   facts.push({ step: 'D3', tiles });
   const addedOk = added.title === 'Timeline' && added.focused && added.selected && saveOnAdded;
-  const stageOk = inView.fraction >= 0.5;
-  return { ok: !state.form && !state.stage && dlg && tiles.length >= 13 && visualMissing.length === 0 && changed && addedOk && stageOk && noDialogs(a2), detail: `gallery replaced the editor's main area (form present: ${state.form}, stage present: ${state.stage}); ${tiles.length} layout tiles, without a loaded preview: [${visualMissing.join(',')}]; ${fmt(shots)}; the added slide's title "${added.title}" focused ${added.focused} selected ${added.selected}, Save enabled ${saveOnAdded}; timeline filled, preview changed: ${changed}; after typing the stage is ${Math.round(inView.fraction * 100)}% in view (y ${inView.top}-${inView.bottom} of ${inView.vh}; scrolled: ${(inView.scrolled ?? []).join(' ') || 'nothing'}; page scroll ${inView.pageScroll}); ${more.join('; ')}` };
+  stageWhileTyping = inView;
+  return { ok: !state.form && !state.stage && dlg && tiles.length >= 13 && visualMissing.length === 0 && changed && addedOk && noDialogs(a2), detail: `gallery replaced the editor's main area (form present: ${state.form}, stage present: ${state.stage}); ${tiles.length} layout tiles, without a loaded preview: [${visualMissing.join(',')}]; ${fmt(shots)}; the added slide's title "${added.title}" focused ${added.focused} selected ${added.selected}, Save enabled ${saveOnAdded}; timeline filled, preview changed: ${changed}; ${more.join('; ')}` };
+});
+
+// The slide being edited stays in view while its form is filled (measured in D3 after typing the timeline).
+await step('D3s the stage while typing in the form', async () => {
+  const v = stageWhileTyping;
+  if (!v) return { ok: false, detail: 'D3 did not reach the form' };
+  // The whole editor scrolling (its shell's scroller or the page), not the editor's own regions (the form, the slide list).
+  const outer = [...(v.scrolled ?? []).filter((x) => /-shell-scroller:|^(html|body|main):/.test(x)), ...(v.pageScroll ? [`page:${v.pageScroll}`] : [])];
+  return { ok: v.fraction >= 0.5 && outer.length === 0, detail: `after typing the stage is ${Math.round(v.fraction * 100)}% in view inside the editor's region (y ${v.top}-${v.bottom} of ${v.vh}); scrolled: ${(v.scrolled ?? []).join(' ') || 'nothing'} (anything but the editor's own region scrolling: ${outer.join(' ') || 'none'}); region ${JSON.stringify(v.main)}` };
 });
 
 // D4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
