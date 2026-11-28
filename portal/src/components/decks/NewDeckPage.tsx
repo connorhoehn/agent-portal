@@ -104,6 +104,10 @@ export function NewDeckPage(props: NewDeckPageProps) {
       {facts.note && <T size="xs" tone="secondary" wrap>{facts.note}</T>}
     </Stack>
   ) : null;
+  const factsAction = facts ? (
+    <Button variant="primary" size="sm" disabled={!canStart} onClick={() => { void go('facts'); }} data-testid={`${testIdPrefix}-new-submit`}>
+      {busy === 'facts' ? facts.busyLabel : facts.submitLabel}</Button>
+  ) : null;
   // Each choice carries its own button; the header has none, and its title wraps rather than truncating at phone width.
   // The sections are PageSection, h2 under the frame's h1 (ui-components 2.549.0).
   return (
@@ -116,11 +120,14 @@ export function NewDeckPage(props: NewDeckPageProps) {
               {({ id }) => <Input id={id} value={title} placeholder={props.titlePlaceholder} onChange={(e) => setTitle(e.target.value)} data-testid={`${testIdPrefix}-new-title`} />}
             </FormField>
             {facts && (
-              <PageSection size="sm" title={facts.label} data-testid={`${testIdPrefix}-new-facts`}
-                actions={<Button variant="primary" size="sm" disabled={!canStart} onClick={() => { void go('facts'); }} data-testid={`${testIdPrefix}-new-submit`}>
-                  {busy === 'facts' ? facts.busyLabel : facts.submitLabel}</Button>}>
-                {/* At phone width the options fold away, so the examples show on arrival; every option stays one tap away. */}
-                {compactFacts ? <Disclosure density="compact" summary={<T as="span" size="xs" weight="medium">Options</T>} data-testid={`${testIdPrefix}-new-facts-options`}>{factsBody}</Disclosure> : factsBody}
+              <PageSection size="sm" title={facts.label} data-testid={`${testIdPrefix}-new-facts`} {...(compactFacts ? {} : { actions: factsAction })}>
+                {/* At phone width the choice is one row, its options folded beside its button, so the examples show on arrival. */}
+                {compactFacts ? (
+                  <Inline gap="sm" align="start" wrap={false}>
+                    <Disclosure density="compact" className="min-w-0 flex-1" summary={<T as="span" size="xs" weight="medium">Options</T>} data-testid={`${testIdPrefix}-new-facts-options`}>{factsBody}</Disclosure>
+                    {factsAction}
+                  </Inline>
+                ) : factsBody}
               </PageSection>
             )}
             <PageSection size="sm" title="From an example" data-testid={`${testIdPrefix}-new-examples`}
