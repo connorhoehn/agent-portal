@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-28T05:00:51.975Z",
-  "serverHandlerSha": "03187992af346f6dac3be3ba6b3b304f75dfd16bda3aba52bbac7b859e8d76f0",
+  "capturedAt": "2026-11-28T05:25:35.372Z",
+  "serverHandlerSha": "7b54a36623352eae354c664ad95abdb41af701ebeeabaa9e7061f68c6d880588",
   "baseUrl": "http://127.0.0.1:3013",
   "personas": [
     "orgiq/admin",
@@ -1560,21 +1560,56 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "array"
+        "$": "array",
+        "$[]": "object",
+        "$[].id": "string",
+        "$[].latestRevision": "object",
+        "$[].latestRevision.createdAt": "string",
+        "$[].latestRevision.id": "string",
+        "$[].latestRevision.label": "string",
+        "$[].latestRevision.producedBy": "string",
+        "$[].teamId": "string",
+        "$[].title": "string",
+        "$[].updatedAt": "string"
       },
       "values": {}
     },
     "GET /api/assessment/decks/:id": {
-      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "activeRevisionId": "string",
+        "audience": "string",
+        "createdAt": "string",
+        "id": "string",
+        "lockedSlideIds": "array",
+        "revisions": "array",
+        "revisions[]": "object",
+        "revisions[].createdAt": "string",
+        "revisions[].id": "string",
+        "revisions[].label": "string",
+        "revisions[].producedBy": "string",
+        "teamId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {}
     },
     "GET /api/assessment/decks/:id/chart-reports": {
-      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "reports": "array"
+      },
+      "values": {}
     },
     "GET /api/assessment/decks/:id/revisions/:rid/file": {
-      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+      "skipped": "no value found for :rid under /api/assessment/decks/deck-5a301e00-0000-4000-8000-000000000005/revisions (orgiq/admin); no value found for :rid under /api/assessment/decks/deck-5a301e00-0000-4000-8000-000000000005/revisions (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
     },
     "GET /api/assessment/decks/:id/revisions/:rid/spec": {
-      "skipped": "no value found for :id under /api/assessment/decks (orgiq/admin); no value found for :id under /api/assessment/decks (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
+      "skipped": "no value found for :rid under /api/assessment/decks/deck-5a301e00-0000-4000-8000-000000000005/revisions (orgiq/admin); no value found for :rid under /api/assessment/decks/deck-5a301e00-0000-4000-8000-000000000005/revisions (assessment/admin); no value found for :id under /api/assessment/decks (anonymous)"
     },
     "GET /api/assessment/dimension-index": {
       "persona": "orgiq/admin",
@@ -4027,12 +4062,12 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
+        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -6011,21 +6046,69 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "array"
+        "$": "array",
+        "$[]": "object",
+        "$[].id": "string",
+        "$[].includesBudget": "boolean",
+        "$[].latestRevision": "object",
+        "$[].latestRevision.createdAt": "string",
+        "$[].latestRevision.id": "string",
+        "$[].latestRevision.label": "string",
+        "$[].latestRevision.producedBy": "string",
+        "$[].projectId": "string",
+        "$[].title": "string",
+        "$[].updatedAt": "string"
       },
       "values": {}
     },
     "GET /api/initiative-decks/:id": {
-      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "activeRevisionId": "string",
+        "createdAt": "string",
+        "id": "string",
+        "includesBudget": "boolean",
+        "lockedSlideIds": "array",
+        "onInitiative": "boolean",
+        "projectId": "string",
+        "revisions": "array",
+        "revisions[]": "object",
+        "revisions[].createdAt": "string",
+        "revisions[].id": "string",
+        "revisions[].label": "string",
+        "revisions[].producedBy": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {}
     },
     "GET /api/initiative-decks/:id/chart-reports": {
-      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "reports": "array",
+        "reports[]": "object",
+        "reports[].description": "string",
+        "reports[].id": "string",
+        "reports[].money": "boolean",
+        "reports[].params": "array",
+        "reports[].params[]": "object",
+        "reports[].params[].description": "string",
+        "reports[].params[].name": "string",
+        "reports[].params[].required": "boolean",
+        "reports[].params[].values": "array",
+        "reports[].params[].values[]": "string"
+      },
+      "values": {}
     },
     "GET /api/initiative-decks/:id/revisions/:rid/file": {
-      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+      "skipped": "no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (orgiq/admin); no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (assessment/admin); no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (anonymous)"
     },
     "GET /api/initiative-decks/:id/revisions/:rid/spec": {
-      "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+      "skipped": "no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (orgiq/admin); no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (assessment/admin); no value found for :rid under /api/initiative-decks/idk-5a301e00-0000-4000-8000-000000000001/revisions (anonymous)"
     },
     "GET /api/initiative-decks/deck-layouts": {
       "persona": "orgiq/admin",
@@ -8691,7 +8774,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
