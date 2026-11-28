@@ -22,7 +22,7 @@ import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
 import { DeckFindingsLine } from './DeckFindingsLine';
 import { deckSlideFindings, withPlaceholderSources } from './deckFindings';
-import { draftRefusal, withPlaceholderTitles } from './deckRefusal';
+import { draftRefusal, titleText, withPlaceholderTitles } from './deckRefusal';
 import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
@@ -267,7 +267,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const reportPanelOpen = !cannotEdit && reportPanel && !presenting;
   const reportPanelNode = reportPanelOpen ? (
     <DeckReportChartPanel tenant={tenant} deckId={deckId} headRevisionId={deck.activeRevisionId} reports={reports} blockedReason={reportBlocked}
-      slide={selectedSlide ? { id: selectedSlide.id, index: selectedIndex, title: selectedSlide.title, isChart: selectedSlide.layout === 'chart' } : null}
+      slide={selectedSlide ? { id: selectedSlide.id, index: selectedIndex, title: titleText(selectedSlide.title), isChart: selectedSlide.layout === 'chart' } : null}
       onApplied={out => { setReportPanel(false); void reload().then(next => { if (next) setRevisionId(out.revision.id); }); }}
       onClose={() => setReportPanel(false)} testIdPrefix={testIdPrefix} />
   ) : null;

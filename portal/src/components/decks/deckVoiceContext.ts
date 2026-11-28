@@ -5,6 +5,7 @@
 
 import type { PublishedPage } from '../../lib/voice/pageContext.ts';
 import type { DeckSpec, DeckTenantId } from './deckApi.ts';
+import { titleText } from './deckRefusal.ts';
 
 /** `?tab=` values the editor publishes as its tabs: `layouts` shows the example layouts in place of the stage. */
 export const DECK_LAYOUTS_TAB = 'layouts';
@@ -34,7 +35,7 @@ export function deckVoiceContext(i: DeckVoiceInput): PublishedPage {
     path: i.path,
     record: { ref: `deck:${i.deckId}`, title: i.title },
     rowsLabel: 'slides',
-    rows: i.spec.slides.map((s, n) => ({ ref: `slide:${s.id}`, title: s.title?.trim() || `Untitled ${layoutWords(s.layout)} slide ${n + 1}`, status: layoutWords(s.layout) })),
+    rows: i.spec.slides.map((s, n) => ({ ref: `slide:${s.id}`, title: titleText(s.title).trim() || `Untitled ${layoutWords(s.layout)} slide ${n + 1}`, status: layoutWords(s.layout) })),
     total: i.spec.slides.length,
     offer: i.readOnly ? null : DECK_OFFER,
     deck: {
@@ -43,7 +44,7 @@ export function deckVoiceContext(i: DeckVoiceInput): PublishedPage {
       selectedPosition: selected >= 0 ? selected + 1 : 1,
       dirty: i.dirty, readOnly: i.readOnly,
       // ui-components' DeckSpec predates the engine's items; the saved spec carries them on cards and process slides.
-      slides: i.spec.slides.map((s) => { const items = (s as { items?: Array<{ title: string; text?: string; icon?: string }> }).items; return { id: s.id, title: s.title ?? '', layout: s.layout, ...(items?.length ? { items } : {}) }; }),
+      slides: i.spec.slides.map((s) => { const items = (s as { items?: Array<{ title: string; text?: string; icon?: string }> }).items; return { id: s.id, title: titleText(s.title), layout: s.layout, ...(items?.length ? { items } : {}) }; }),
     },
   };
 }

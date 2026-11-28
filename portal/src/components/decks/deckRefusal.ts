@@ -6,6 +6,9 @@
 
 import type { DeckSpec } from './deckApi.ts';
 
+/** A title's words without its emphasis (the library's `plainText`, kept local so node tests skip the React bundle). */
+export const titleText = (t: string | ReadonlyArray<{ text: string }> | undefined): string => typeof t === 'string' ? t : (t ?? []).map(r => r.text).join('');
+
 /** The server's `LAYOUT_TITLE` (middleware lib/deck-shared/slide-starters.ts): what `add_slide` titles a slide with. */
 export const LAYOUT_PLACEHOLDER_TITLE: Readonly<Record<string, string>> = {
   title: 'Title', section: 'Section', bullets: 'Key points', 'two-column': 'Two columns', chart: 'Chart', quote: 'Quote',
@@ -50,7 +53,7 @@ export function withPlaceholderTitles(prev: DeckSpec | null, next: DeckSpec): De
   const slides = next.slides.map(s => {
     if (!fresh.has(s.id)) return s;
     let out = s;
-    if (!s.title.trim()) out = { ...out, title: LAYOUT_PLACEHOLDER_TITLE[s.layout] ?? 'New slide' };
+    if (!titleText(s.title).trim()) out = { ...out, title: LAYOUT_PLACEHOLDER_TITLE[s.layout] ?? 'New slide' };
     const starter = LAYOUT_STARTERS[s.layout];
     if (starter) {
       const empty = Object.keys(starter).filter(k => blank((s as unknown as Record<string, unknown>)[k]));
