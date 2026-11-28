@@ -174,7 +174,7 @@ export function useDeckAgentRun<D extends DeckDetailCore & { title: string }>(do
     ...(cfg.sourceOptions ? { sourceOptions: true } : {}),
     generatingSlideIds: generatingIds(spec, runSlideId, !!runId || inlineBusy),
     ...(deck ? {
-      assistant: <DeckAssistantPane deckTitle={deck.title} questionRequest={questionRequest}
+      assistant: <DeckAssistantPane deckTitle={deck.title} questionRequest={questionRequest} startClosed
         question={supportsQuestions ? <InitiativeAgentPanel key={`${session?.tenant}:${session?.sub}:${session?.role}:${deckId}`}
           ref={questions} projectId={projectId} assistantTitle="Presentation assistant" emptyTitle="Ask about this presentation"
           onOpenWorkItem={id => navigate(`/iq/projects/${encodeURIComponent(projectId)}?tab=work&item=${encodeURIComponent(id)}`)} />

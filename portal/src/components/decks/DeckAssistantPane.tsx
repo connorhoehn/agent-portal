@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router';
 import { SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneTabSpec } from '@connorhoehn/ui-components';
 import { Inline, Stack } from '@connorhoehn/ui-components/shared';
@@ -15,10 +16,26 @@ export interface DeckAssistantPaneProps {
   deckTitle: string;
   assistantTitle?: string;
   composerTestId?: string;
+  /**
+   * The deck editor opens with the pane closed, so the slide and its toolbar (Theme included) have the width; it opens
+   * when the person asks the agent something, asks for the agent from the toolbar or the composer, or a huddle needs it.
+   * The page owns that state (SidePane's `onClose`), so closing it here is not remembered for other pages' panes.
+   */
+  startClosed?: boolean;
 }
 
 /** The presentation's registered shell pane, sharing the shell's current call. */
-export function DeckAssistantPane({ question, questionRequest, deckTitle, assistantTitle = 'Presentation assistant', composerTestId = 'deck-composer-dock' }: DeckAssistantPaneProps) {
+export function DeckAssistantPane({ question, questionRequest, deckTitle, assistantTitle = 'Presentation assistant', composerTestId = 'deck-composer-dock', startClosed = false }: DeckAssistantPaneProps) {
+  const [ownOpen, setOwnOpen] = useState(!startClosed);
+  // The agent's thread stays mounted while the pane is closed (the page submits a question to it, then the pane opens):
+  // it renders into a node this pane owns, which moves into the pane's body when the pane is on screen.
+  const [holder] = useState(() => { const node = document.createElement('div'); node.className = 'flex min-h-0 flex-1 flex-col'; return node; });
+  const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!agentSlot) return;
+    agentSlot.appendChild(holder);
+    return () => { holder.remove(); };
+  }, [agentSlot, holder]);
   const [params, setParams] = useSearchParams();
   const sidePane = useSidePane();
   const paneHost = useSidePaneHost();
@@ -31,7 +48,7 @@ export function DeckAssistantPane({ question, questionRequest, deckTitle, assist
     { id: 'agent', label: 'Agent' },
     ...(callId ? [{ id: 'huddle', label: 'Huddle' }] : []),
   ], [callId]);
-  const pane = usePaneState({ tabs, defaultTab: 'agent', params, setParams, onOpen: sidePane.reveal });
+  const pane = usePaneState({ tabs, defaultTab: 'agent', params, setParams, onOpen: () => { setOwnOpen(true); sidePane.reveal(); } });
   const openPane = useRef(pane.open);
   openPane.current = pane.open;
   const [viewsSlot, setViewsSlot] = useState<HTMLElement | null>(null);
@@ -65,6 +82,7 @@ export function DeckAssistantPane({ question, questionRequest, deckTitle, assist
   useEffect(() => registerPaneOwner?.({ visible: huddleVisible, hide: paneHost.collapse }), [registerPaneOwner, huddleVisible, paneHost.collapse]);
   useComposerFocusReveal(request => {
     if (callId && request.target?.kind === 'huddle') openPane.current('huddle');
+    else if (startClosed && request.mode === 'agent') openPane.current('agent');
   });
 
   // Message/openPane requests can arrive while the huddle is already open.
@@ -80,7 +98,10 @@ export function DeckAssistantPane({ question, questionRequest, deckTitle, assist
 
   const showingHuddle = pane.tab === 'huddle' && !!callId;
   return (
-    <SidePane
+    <>
+    {createPortal(question, holder)}
+    {startClosed && !ownOpen ? null : <SidePane
+      {...(startClosed ? { onClose: () => setOwnOpen(false) } : {})}
       title={showingHuddle ? 'Huddle dialogue' : assistantTitle}
       subtitle={showingHuddle ? huddle!.title : deckTitle}
       closeLabel={showingHuddle ? 'Collapse huddle dialogue' : `Collapse ${assistantTitle.toLowerCase()}`}
@@ -93,14 +114,13 @@ export function DeckAssistantPane({ question, questionRequest, deckTitle, assist
       trailing={<Inline ref={setViewsSlot} gap="none" align="center" wrap={false} hidden={!showingHuddle} className="shrink-0" data-testid="deck-assistant-huddle-views" />}
       data-testid="deck-assistant-pane"
     >
-      <Stack gap="none" className="min-h-0 flex-1" hidden={showingHuddle} data-testid="deck-assistant-agent">
-        {question}
-      </Stack>
+      <Stack ref={setAgentSlot} gap="none" className="min-h-0 flex-1" hidden={showingHuddle} data-testid="deck-assistant-agent" />
       {callId && (
         <Stack gap="none" className="min-h-0 flex-1" hidden={!showingHuddle} data-testid="deck-assistant-huddle">
           <ConversationViewsSlot.Provider value={viewsSlot}><HuddleChatBody key={callId} /></ConversationViewsSlot.Provider>
         </Stack>
       )}
-    </SidePane>
+    </SidePane>}
+    </>
   );
 }
