@@ -29,6 +29,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
   IsAuthorizedCommand: class {},
 }));
 
+import { sampleDeckId } from '../../mock/sample-decks.js';
 import express from 'express';
 import JSZip from 'jszip';
 import request from '../../test-support/http.js';
@@ -47,7 +48,8 @@ import { DECK_TEMPLATES, SLIDE_LAYOUTS } from '../../lib/deck-shared/index.js';
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
 afterAll(() => restoreRelease());
-beforeEach(() => { assessmentDecksFixture.reset(); assessmentDeckRevisionsFixture.reset(); });
+// The default world's sample readout (mock/sample-decks.ts) is left out: these tests count the decks they make.
+beforeEach(() => { assessmentDecksFixture.reset(); assessmentDeckRevisionsFixture.reset(); assessmentDecksFixture.rows().splice(0); assessmentDeckRevisionsFixture.rows().splice(0); });
 
 function appAs(session: Partial<Session>) {
   const app = express();
@@ -254,8 +256,9 @@ describe('review decks — mock reset', () => {
     expect((await request(app).get('/api/assessment/decks')).body).toHaveLength(1);
     const reset = await request(app).post('/api/__mock/reset').send({});
     expect(reset.status).toBe(200);
-    expect((await request(app).get('/api/assessment/decks')).body).toEqual([]);
-    expect(assessmentDeckRevisionsFixture.rows()).toEqual([]);
+    // Reset puts the seed back: only the default world's sample readout remains.
+    expect((await request(app).get('/api/assessment/decks')).body.map((d: { id: string }) => d.id)).toEqual([sampleDeckId('deck', 5)]);
+    expect(assessmentDeckRevisionsFixture.rows().map((r) => r.deckId)).toEqual([sampleDeckId('deck', 5)]);
   });
 });
 

@@ -36,6 +36,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
   IsAuthorizedCommand: class {},
 }));
 
+import { isSampleDeckId } from '../../mock/sample-decks.js';
 import express from 'express';
 import JSZip from 'jszip';
 import request from '../../test-support/http.js';
@@ -68,7 +69,8 @@ const BASE = '/api/initiative-decks';
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
 afterAll(() => restoreRelease());
-beforeEach(() => { initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); });
+// The default world's sample decks (mock/sample-decks.ts) are left out: these tests count the decks they make.
+beforeEach(() => { initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); initiativeDecksFixture.rows().splice(0); initiativeDeckRevisionsFixture.rows().splice(0); });
 
 function appAs(session: Partial<Session>) {
   const app = express();
@@ -281,7 +283,8 @@ describe('initiative status deck — revisions, preview, download', () => {
     expect(detail.revisions.map((r: { id: string }) => r.id)).toEqual([saved.body.id, made.revisionId]);
     expect(detail.activeRevisionId).toBe(saved.body.id);
     expect((await request(app).post('/api/__mock/reset')).status).toBeLessThan(300);
-    expect((await request(app).get(BASE)).body).toEqual([]);
+    // Reset puts the seed back: only the default world's sample decks remain.
+    expect((await request(app).get(BASE)).body.map((d: { id: string }) => isSampleDeckId(d.id))).not.toContain(false);
   });
 
   it('previews svg per slide and downloads a valid .pptx attachment', async () => {

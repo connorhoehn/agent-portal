@@ -16,6 +16,7 @@ jest.mock('../../providers/identity.js', () => ({ ...jest.requireActual('../../p
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn() }));
 jest.mock('../../lib/live-principal.js', () => ({ ...jest.requireActual('../../lib/live-principal.js'), authorizeConversationChat: jest.fn(async () => true) }));
 jest.mock('../../lib/realtime-gateway.js', () => ({ channelGuard: {} }));
+import { sampleDeckId } from '../../mock/sample-decks.js';
 import express from 'express';
 import request from '../../test-support/http.js';
 import { assessmentWorkGraphRouter, changeFor } from '../assessment-work-graph.js';
@@ -139,7 +140,8 @@ describe('honesty against the assessment REST sources', () => {
     expect(res.body.nodes.find((n: { id: string }) => n.id === `arun:${run.id}`).status).toBe('running');
     // A team page draws the deck and its run, with the team's own runs, not a team-less one.
     const page = await graph('ana', `/api/assessment/work-graph/teams/${TEAM}/graph`);
-    expect(ids(page.body, 'adeck:')).toEqual(['adeck:deck-x1']);
+    // The default world's sample readout for this team (mock/sample-decks.ts) is drawn too.
+    expect(ids(page.body, 'adeck:').sort()).toEqual(['adeck:deck-x1', `adeck:${sampleDeckId('deck', 5)}`].sort());
     expect(ids(page.body, 'arun:')).toContain(`arun:${run.id}`);
     expect(ids(page.body, 'arun:')).not.toContain(`arun:${loose.id}`);
   });
