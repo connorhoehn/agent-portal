@@ -10,7 +10,7 @@
 // (DECK_REVISED_EVENT). Free-form rewriting ("make slide 3 shorter") is NOT offered here: an instruction to an
 // agent is never taken from a voice note (spec §4, "What stays a click").
 
-import { UPDATE_ACTIONS } from './catalogue.ts';
+import { UPDATE_ACTIONS, DECK_LAYOUTS, DECK_STYLE_NAMES, DECK_EMPHASIS_NAMES } from './catalogue.ts';
 import { done, failed, once, refused, NOT_ON_PAGE, type ConfirmPlan, type ToolContext, type ToolResult } from './tools.ts';
 import type { PageDeck } from './pageContext.ts';
 import { announceDeckRevision, deckOpPaths, reportRenameClause, type DeckOperation } from '../../components/decks/deckApi.ts';
@@ -42,7 +42,9 @@ export interface DeckOpsPlan {
 /** The refusal code when no deck is open: the dock is told plainly to open one (refusals.ts). */
 export const NO_DECK_OPEN = 'no-deck-open';
 
-const PAST: Readonly<Record<string, string>> = { Add: 'Added', Rename: 'Renamed', Move: 'Moved', Remove: 'Removed', Fill: 'Filled', Use: 'Now using' };
+const PAST: Readonly<Record<string, string>> = {
+  Add: 'Added', Rename: 'Renamed', Move: 'Moved', Remove: 'Removed', Fill: 'Filled', Use: 'Now using', Compose: 'Composed', Change: 'Changed', Put: 'Put', Give: 'Gave', Clear: 'Cleared',
+};
 /** A card line ("Fill slide 4 with …") said as done ("Filled slide 4 with …."); "3 changes to X" becomes "Made 3 changes to X.". */
 export function spokenDone(line: string): string {
   const [verb, ...rest] = line.split(' ');
@@ -139,8 +141,58 @@ function planOne(op: Rec, deck: PageDeck, tenant: string): { op: DeckOperation; 
       if (!THEME_WORDS[theme]) return { result: refused('The themes are product, engineering, plain, or this workspace\'s own.') };
       return { op: { op: 'set_theme', theme: theme as 'product' }, line: `Use the ${THEME_WORDS[theme]} theme` };
     }
+    case 'set_style': {
+      const style = typeof op['style'] === 'string' ? op['style'] : '';
+      if (!(DECK_STYLE_NAMES as readonly string[]).includes(style)) return { result: refused(`The styles are ${DECK_STYLE_NAMES.join(', ')}.`) };
+      return { op: { op: 'set_style', style }, line: `Compose the deck in the ${style} style` };
+    }
+    case 'change_layout': {
+      // A click confirms it (clickFor): what the new layout does not draw is dropped.
+      const s = at('slide', 'to change'); if ('result' in s) return s;
+      const layout = typeof op['layout'] === 'string' ? op['layout'] : '';
+      if (!(DECK_LAYOUTS as readonly string[]).includes(layout)) return { result: refused('Say the layout to change it to (cards, process, big number…).') };
+      if (deck.slides[s.index]!.layout === layout) return { result: refused(`Slide ${s.index + 1} is already a ${layoutWords(layout)} slide.`) };
+      const w = layoutWords(layout);
+      return { op: { op: 'change_layout', slideId: deck.slides[s.index]!.id, layout }, line: `Change ${pos(s.index)} to ${article(w)} ${w} slide (what it cannot show is dropped)` };
+    }
+    case 'set_decoration': {
+      const s = at('slide', 'to decorate'); if ('result' in s) return s;
+      const graphic = typeof op['graphic'] === 'string' ? op['graphic'].trim().toLowerCase().replace(/\s+/g, '-') : '';
+      if (!graphic) return { result: refused('Say the graphic (blob, waves, dots, rocket…) or none.') };
+      if (graphic === 'none') return { op: { op: 'set_decoration', slideId: deck.slides[s.index]!.id, decoration: 'none' }, line: `Clear the decoration from ${pos(s.index)}` };
+      return { op: { op: 'set_decoration', slideId: deck.slides[s.index]!.id, decoration: { graphic } }, line: `Put ${article(graphic)} ${graphic.replace(/-/g, ' ')} on ${pos(s.index)}` };
+    }
+    case 'set_icon': {
+      const s = at('slide', 'with the item'); if ('result' in s) return s;
+      const slide = deck.slides[s.index]!;
+      const items = slide.items ?? [];
+      if (!items.length) return { result: refused(`Slide ${s.index + 1} has no cards or steps to give an icon; icons go on cards and process slides.`) };
+      const n = typeof op['n'] === 'number' ? op['n'] : 0;
+      if (!Number.isInteger(n) || n < 1 || n > items.length) return { result: refused(`Say which item, 1 to ${items.length}.`) };
+      const icon = typeof op['icon'] === 'string' ? op['icon'].trim().toLowerCase().replace(/\s+/g, '-') : '';
+      if (!icon) return { result: refused('Say the icon (rocket, shield, users…).') };
+      const next = items.map((it, i) => (i === n - 1 ? { ...it, icon } : { ...it }));
+      return { op: { op: 'set_fields', slideId: slide.id, fields: { items: next } }, line: `Give item ${n} on ${pos(s.index)} (${quoted(items[n - 1]!.title)}) the ${icon} icon` };
+    }
+    case 'set_emphasis': {
+      const s = at('slide', 'to mark'); if ('result' in s) return s;
+      const said = typeof op['emphasis'] === 'string' ? op['emphasis'] : '';
+      if (said !== 'none' && !(DECK_EMPHASIS_NAMES as readonly string[]).includes(said)) return { result: refused(`The emphases are ${DECK_EMPHASIS_NAMES.join(', ')}, or none.`) };
+      const m = /^\s*(\d{1,2})\s*(?:-|to)?\s*(\d{1,2})?\s*$/.exec(typeof op['words'] === 'string' ? op['words'] : String(op['words'] ?? ''));
+      const from = m ? Number(m[1]) : 0;
+      const to = m?.[2] ? Number(m[2]) : from;
+      if (!Number.isInteger(from) || from < 1 || !Number.isInteger(to) || to < from) return { result: refused('Say which words by number, counting from 1 ("words 2 to 3").') };
+      const bullet = typeof op['n'] === 'number' && Number.isInteger(op['n']) ? op['n'] : null;
+      const where = bullet ? `bullet ${bullet}` : 'the title';
+      const words = from === to ? `word ${from}` : `words ${from} to ${to}`;
+      const emphasis = said === 'none' ? null : said;
+      return {
+        op: { op: 'set_emphasis', slideId: deck.slides[s.index]!.id, target: bullet ? { bullet } : 'title', from, ...(to !== from ? { to } : {}), emphasis },
+        line: emphasis ? `Give ${words} of ${where} on ${pos(s.index)} ${emphasis} emphasis` : `Clear the emphasis on ${words} of ${where} on ${pos(s.index)}`,
+      };
+    }
     default:
-      return { result: refused('A deck takes add_slide, set_title, move_slide, remove_slide, set_chart or set_theme.') };
+      return { result: refused('A deck takes add_slide, set_title, move_slide, remove_slide, set_chart, set_theme, set_style, change_layout, set_decoration, set_icon or set_emphasis.') };
   }
 }
 

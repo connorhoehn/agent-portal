@@ -721,9 +721,13 @@ export const COMPUTER_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
 };
 
 /** The deck operations the voice may send (`update { ref: 'deck:<id>', fields: { operations } }`; docs/deck-edit-operations.md). */
-export const DECK_VOICE_OPS = ['add_slide', 'set_title', 'move_slide', 'remove_slide', 'set_chart', 'set_theme'] as const;
-/** The deck format's layouts (ui-components SLIDE_LAYOUTS, the engine's). */
-export const DECK_LAYOUTS = ['title', 'section', 'bullets', 'two-column', 'chart', 'quote', 'image', 'key-figures', 'table', 'comparison', 'timeline', 'agenda', 'closing'] as const;
+export const DECK_VOICE_OPS = ['add_slide', 'set_title', 'move_slide', 'remove_slide', 'set_chart', 'set_theme', 'set_style', 'change_layout', 'set_decoration', 'set_icon', 'set_emphasis'] as const;
+/** The deck format's layouts a voice may name (the engine's, less the image ones: a picture is an asset, never said). */
+export const DECK_LAYOUTS = ['title', 'section', 'bullets', 'two-column', 'chart', 'quote', 'key-figures', 'table', 'comparison', 'timeline', 'agenda', 'closing', 'big-quote', 'process', 'cards', 'matrix', 'big-number', 'people', 'funnel', 'kpi'] as const;
+/** The engine's composition styles (DECK_STYLES). */
+export const DECK_STYLE_NAMES = ['bold', 'editorial', 'minimal', 'playful', 'corporate'] as const;
+/** The engine's word emphases (DeckEmphasis). */
+export const DECK_EMPHASIS_NAMES = ['highlight', 'accent', 'bold', 'underline', 'outline', 'gradient'] as const;
 /** The chart reports (middleware lib/deck-shared/reports.ts DECK_REPORTS). */
 export const DECK_REPORT_IDS = ['spend-by-initiative', 'spend-by-model', 'runs-by-outcome', 'findings-by-severity', 'jobs-by-status'] as const;
 
@@ -1010,36 +1014,42 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     description: 'Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses.',
     voiceAdds: 'The user confirms on a card that shows the change.',
     parameters: obj({
-      ref: str('The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
+      ref: str('A ref, a position in the last result, a row in view by name, or "report:program" (Assessment\'s program report).', { minLength: 1, maxLength: 200 }),
       fields: obj({
-        status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
-        assignee: str('Who owns it, by name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        status: str('work-item: open to cancelled; finding: dismissed; run: stopped (Assessment), cancelled (Pipelines); feedback: resolved, dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
+        assignee: str('The owner by name ("me": the user).', { minLength: 1, maxLength: 120 }),
         sprint: str('"this", "next", "none" or a sprint name.', { minLength: 1, maxLength: 80 }),
         response: str('feedback resolved: the response.', { minLength: 1, maxLength: 2000 }),
-        paused: { type: 'boolean', description: 'true pauses it, false resumes it.' },
-        reviewed: str('Accept or reject its result.', { enum: ['accept', 'reject'] }),
-        requeued: { type: 'boolean', description: 'true runs a failed or cancelled job again.' },
-        member: { type: 'boolean', description: 'true joins it, false leaves it.' },
+        paused: { type: 'boolean', description: 'true pauses, false resumes.' },
+        reviewed: str('Its result.', { enum: ['accept', 'reject'] }),
+        requeued: { type: 'boolean', description: 'true reruns a failed or cancelled job.' },
+        member: { type: 'boolean', description: 'true joins, false leaves.' },
         read: { type: 'boolean', description: 'true marks it read.' },
-        publish: { type: 'boolean', description: 'true publishes the program report to its readers.' },
+        publish: { type: 'boolean', description: 'true publishes the program report.' },
         operations: {
           type: 'array', minItems: 1, maxItems: 5,
-          description: 'deck (the deck in view): typed edits, applied in order to its saved version.',
+          description: 'deck in view: edits, in order.',
           items: obj({
-            op: str('add_slide, set_title, move_slide, remove_slide, set_chart (from a report) or set_theme.', { enum: DECK_VOICE_OPS }),
-            slide: str('The slide, by its position ("3"); "this" is the one selected.', { minLength: 1, maxLength: 40 }),
-            after: str('add_slide, move_slide: after this position; "start" or "end".', { minLength: 1, maxLength: 40 }),
-            layout: str('add_slide: the layout.', { enum: DECK_LAYOUTS }),
-            title: str('add_slide, set_title: the title, as said.', { minLength: 1, maxLength: 120 }),
-            kind: str('set_chart: the chart.', { enum: ['bar', 'line', 'stacked-bar', 'pie'] }),
-            report: str('set_chart: the report (list kind deck-report).', { enum: DECK_REPORT_IDS }),
-            period: str('set_chart: month, 7d or 30d.', { enum: ['month', '7d', '30d'] }),
-            theme: str('set_theme: a built-in, or "workspace" for this workspace\'s own.', { enum: ['product', 'engineering', 'plain', 'workspace'] }),
+            op: str('The edit; set_chart is from a report.', { enum: DECK_VOICE_OPS }),
+            slide: str('By position ("3"); "this" is the selected.', { maxLength: 40 }),
+            after: str('A position, "start" or "end".', { maxLength: 40 }),
+            layout: str('add_slide, change_layout.', { enum: DECK_LAYOUTS }),
+            title: str('As said.', { minLength: 1, maxLength: 120 }),
+            kind: str('set_chart.', { enum: ['bar', 'line', 'stacked-bar', 'pie'] }),
+            report: str('set_chart (list kind deck-report).', { enum: DECK_REPORT_IDS }),
+            period: str('set_chart.', { enum: ['month', '7d', '30d'] }),
+            theme: str('set_theme; "workspace" is its own.', { enum: ['product', 'engineering', 'plain', 'workspace'] }),
+            style: str('set_style.', { enum: DECK_STYLE_NAMES }),
+            graphic: str('set_decoration: waves, rocket… or "none".', { maxLength: 40 }),
+            icon: str('set_icon: a name (rocket…).', { maxLength: 40 }),
+            n: { type: 'integer', description: 'From 1: set_icon\'s card, set_emphasis\'s bullet (else title).' },
+            words: str('set_emphasis: word numbers, "2" or "2-3".', { maxLength: 9 }),
+            emphasis: str('set_emphasis; "none" clears.', { enum: [...DECK_EMPHASIS_NAMES, 'none'] }),
           }, ['op']),
         },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'], 'fields.operations.op': ['remove_slide'] }, sayToConfirm: 'save it', action: null,
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'], 'fields.operations.op': ['remove_slide', 'change_layout'] }, sayToConfirm: 'save it', action: null,
     gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status and owner, ManageSprints + stewardship to move it between sprints, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end; a deck's operations the deck write rule's action (DispatchAgentRun, RunAssessmentAgent, RunPipeline, PostMessage), which the route asks again",
     spend: 'none', idempotent: false, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
     mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status | assigneeId } (the owner from GET /api/graph/projects/:id contributors), GET /api/sprints, PATCH /api/sprints/:sprintId/items { workItemId }, DELETE /api/sprints/:sprintId/items/:itemId; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end; deck (the deck in view, its editor's page context): GET <deck>/:id/chart-reports for set_chart, then POST /api/initiative-decks/:id/operations, POST /api/assessment/decks/:id/operations, POST /api/pipelines/decks/:id/operations, POST /api/chat/decks/:id/operations { baseRevisionId, operations }",

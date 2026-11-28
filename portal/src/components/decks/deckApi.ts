@@ -305,7 +305,12 @@ export type DeckOperation =
   | { op: 'move_slide'; slideId: string; after?: string; to?: 'start' }
   | { op: 'set_title'; slideId: string; title: string }
   | { op: 'set_theme'; theme: 'product' | 'engineering' | 'plain' | { ref: string } }
-  | { op: 'set_chart'; slideId: string; kind: DeckChartKindId; report: { report: string; params?: Record<string, string> } };
+  | { op: 'set_chart'; slideId: string; kind: DeckChartKindId; report: { report: string; params?: Record<string, string> } }
+  | { op: 'set_style'; style: string }
+  | { op: 'change_layout'; slideId: string; layout: string }
+  | { op: 'set_decoration'; slideId: string; decoration: 'none' | { graphic: string } }
+  | { op: 'set_fields'; slideId: string; fields: { items: Array<{ title: string; text?: string; icon?: string }> } }
+  | { op: 'set_emphasis'; slideId: string; target: 'title' | { bullet: number }; from: number; to?: number; emphasis: string | null };
 
 export interface DeckOperationsResult {
   revision: { id: string; label: string; createdAt: string; producedBy: string };

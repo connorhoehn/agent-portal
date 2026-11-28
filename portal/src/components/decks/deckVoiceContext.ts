@@ -42,7 +42,8 @@ export function deckVoiceContext(i: DeckVoiceInput): PublishedPage {
       selectedSlideId: selected >= 0 ? i.spec.slides[selected]!.id : i.spec.slides[0]?.id ?? null,
       selectedPosition: selected >= 0 ? selected + 1 : 1,
       dirty: i.dirty, readOnly: i.readOnly,
-      slides: i.spec.slides.map((s) => ({ id: s.id, title: s.title ?? '', layout: s.layout })),
+      // ui-components' DeckSpec predates the engine's items; the saved spec carries them on cards and process slides.
+      slides: i.spec.slides.map((s) => { const items = (s as { items?: Array<{ title: string; text?: string; icon?: string }> }).items; return { id: s.id, title: s.title ?? '', layout: s.layout, ...(items?.length ? { items } : {}) }; }),
     },
   };
 }

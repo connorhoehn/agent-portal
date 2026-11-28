@@ -1257,33 +1257,64 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "additionalProperties": false,
           "properties": {
             "assignee": {
-              "description": "Who owns it, by name ("me" for the user).",
+              "description": "The owner by name ("me": the user).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "member": {
-              "description": "true joins it, false leaves it.",
+              "description": "true joins, false leaves.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "operations": {
-              "description": "deck (the deck in view): typed edits, applied in order to its saved version.",
+              "description": "deck in view: edits, in order.",
               "items": {
                 "additionalProperties": false,
                 "properties": {
                   "after": {
-                    "description": "add_slide, move_slide: after this position; "start" or "end".",
+                    "description": "A position, "start" or "end".",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "emphasis": {
+                    "description": "set_emphasis; "none" clears.",
+                    "enum": [
+                      "highlight",
+                      "accent",
+                      "bold",
+                      "underline",
+                      "outline",
+                      "gradient",
+                      "none",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "graphic": {
+                    "description": "set_decoration: waves, rocket… or "none".",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "icon": {
+                    "description": "set_icon: a name (rocket…).",
                     "type": [
                       "string",
                       "null",
                     ],
                   },
                   "kind": {
-                    "description": "set_chart: the chart.",
+                    "description": "set_chart.",
                     "enum": [
                       "bar",
                       "line",
@@ -1297,7 +1328,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                     ],
                   },
                   "layout": {
-                    "description": "add_slide: the layout.",
+                    "description": "add_slide, change_layout.",
                     "enum": [
                       "title",
                       "section",
@@ -1305,13 +1336,20 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                       "two-column",
                       "chart",
                       "quote",
-                      "image",
                       "key-figures",
                       "table",
                       "comparison",
                       "timeline",
                       "agenda",
                       "closing",
+                      "big-quote",
+                      "process",
+                      "cards",
+                      "matrix",
+                      "big-number",
+                      "people",
+                      "funnel",
+                      "kpi",
                       null,
                     ],
                     "type": [
@@ -1319,8 +1357,15 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                       "null",
                     ],
                   },
+                  "n": {
+                    "description": "From 1: set_icon's card, set_emphasis's bullet (else title).",
+                    "type": [
+                      "integer",
+                      "null",
+                    ],
+                  },
                   "op": {
-                    "description": "add_slide, set_title, move_slide, remove_slide, set_chart (from a report) or set_theme.",
+                    "description": "The edit; set_chart is from a report.",
                     "enum": [
                       "add_slide",
                       "set_title",
@@ -1328,11 +1373,16 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                       "remove_slide",
                       "set_chart",
                       "set_theme",
+                      "set_style",
+                      "change_layout",
+                      "set_decoration",
+                      "set_icon",
+                      "set_emphasis",
                     ],
                     "type": "string",
                   },
                   "period": {
-                    "description": "set_chart: month, 7d or 30d.",
+                    "description": "set_chart.",
                     "enum": [
                       "month",
                       "7d",
@@ -1345,7 +1395,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                     ],
                   },
                   "report": {
-                    "description": "set_chart: the report (list kind deck-report).",
+                    "description": "set_chart (list kind deck-report).",
                     "enum": [
                       "spend-by-initiative",
                       "spend-by-model",
@@ -1360,14 +1410,29 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                     ],
                   },
                   "slide": {
-                    "description": "The slide, by its position ("3"); "this" is the one selected.",
+                    "description": "By position ("3"); "this" is the selected.",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "style": {
+                    "description": "set_style.",
+                    "enum": [
+                      "bold",
+                      "editorial",
+                      "minimal",
+                      "playful",
+                      "corporate",
+                      null,
+                    ],
                     "type": [
                       "string",
                       "null",
                     ],
                   },
                   "theme": {
-                    "description": "set_theme: a built-in, or "workspace" for this workspace's own.",
+                    "description": "set_theme; "workspace" is its own.",
                     "enum": [
                       "product",
                       "engineering",
@@ -1381,7 +1446,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                     ],
                   },
                   "title": {
-                    "description": "add_slide, set_title: the title, as said.",
+                    "description": "As said.",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "words": {
+                    "description": "set_emphasis: word numbers, "2" or "2-3".",
                     "type": [
                       "string",
                       "null",
@@ -1398,6 +1470,12 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                   "report",
                   "period",
                   "theme",
+                  "style",
+                  "graphic",
+                  "icon",
+                  "n",
+                  "words",
+                  "emphasis",
                 ],
                 "type": "object",
               },
@@ -1407,14 +1485,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "paused": {
-              "description": "true pauses it, false resumes it.",
+              "description": "true pauses, false resumes.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "publish": {
-              "description": "true publishes the program report to its readers.",
+              "description": "true publishes the program report.",
               "type": [
                 "boolean",
                 "null",
@@ -1428,7 +1506,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "requeued": {
-              "description": "true runs a failed or cancelled job again.",
+              "description": "true reruns a failed or cancelled job.",
               "type": [
                 "boolean",
                 "null",
@@ -1442,7 +1520,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "reviewed": {
-              "description": "Accept or reject its result.",
+              "description": "Its result.",
               "enum": [
                 "accept",
                 "reject",

@@ -84,6 +84,32 @@ test('every operation reads as a sentence on the card, and each maps to its type
   }
 });
 
+test('style, layout change, decoration, an item\'s icon and emphasis read as sentences and map to typed operations', async () => {
+  const items = [{ title: 'Faster', icon: 'zap' }, { title: 'Safer', text: 'Keys rotate' }];
+  const withCards = () => page(deck({ slides: [...SLIDES.slice(0, 4), { id: 'cards', title: 'What changes', layout: 'cards', items }] }));
+  const cases: Array<[Record<string, unknown>, string, Record<string, unknown>]> = [
+    [{ op: 'set_style', style: 'editorial' }, 'Compose the deck in the editorial style.', { op: 'set_style', style: 'editorial' }],
+    [{ op: 'set_decoration', slide: '1', graphic: 'badge seal' }, 'Put a badge seal on slide 1.', { op: 'set_decoration', slideId: 'title', decoration: { graphic: 'badge-seal' } }],
+    [{ op: 'set_decoration', slide: '1', graphic: 'none' }, 'Clear the decoration from slide 1.', { op: 'set_decoration', slideId: 'title', decoration: 'none' }],
+    [{ op: 'set_icon', slide: '5', n: 2, icon: 'shield-check' }, 'Give item 2 on slide 5 ("Safer") the shield-check icon.', { op: 'set_fields', slideId: 'cards', fields: { items: [{ title: 'Faster', icon: 'zap' }, { title: 'Safer', text: 'Keys rotate', icon: 'shield-check' }] } }],
+    [{ op: 'set_emphasis', slide: '3', words: '2-3', emphasis: 'highlight' }, 'Give words 2 to 3 of the title on slide 3 highlight emphasis.', { op: 'set_emphasis', slideId: 'summary', target: 'title', from: 2, to: 3, emphasis: 'highlight' }],
+    [{ op: 'set_emphasis', slide: '3', n: 1, words: '1', emphasis: 'none' }, 'Clear the emphasis on word 1 of bullet 1 on slide 3.', { op: 'set_emphasis', slideId: 'summary', target: { bullet: 1 }, from: 1, emphasis: null }],
+    [{ op: 'add_slide', layout: 'big-number', after: 'end' }, 'Add a big number slide at the end.', { op: 'add_slide', layout: 'big-number', after: 'end' }],
+  ];
+  for (const [op, line, sent] of cases) {
+    const r = await update({ operations: [op] }, { page: withCards });
+    assert.equal(r.card?.detail?.[0], line, JSON.stringify(op));
+    assert.deepEqual((writes(r.log)[0]![1] as { operations: unknown[] }).operations, [sent], JSON.stringify(op));
+  }
+  // A changed layout drops what the new one cannot show, so it takes a click; an icon needs cards or steps.
+  const changed = await update({ operations: [{ op: 'change_layout', slide: '3', layout: 'cards' }] });
+  assert.equal(changed.mode, 'click');
+  assert.equal(changed.card!.detail![0], 'Change slide 3 to a cards slide (what it cannot show is dropped).');
+  const noItems = await update({ operations: [{ op: 'set_icon', slide: '3', n: 1, icon: 'rocket' }] });
+  assert.match(String((noItems.result as { message?: string })?.message ?? JSON.stringify(noItems.result)), /no cards or steps/);
+  assert.equal(writes(noItems.log).length, 0);
+});
+
 test('removing a slide is click-only; several operations go in one request, all or none', async () => {
   const r = await update({ operations: [{ op: 'remove_slide', slide: '2' }, { op: 'set_title', slide: '1', title: 'Auth' }] });
   assert.equal(r.mode, 'click');

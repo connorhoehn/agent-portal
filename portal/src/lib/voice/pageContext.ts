@@ -97,7 +97,8 @@ export interface PageDeck {
   selectedPosition: number;
   dirty: boolean;
   readOnly: boolean;
-  slides: ReadonlyArray<{ id: string; title: string; layout: string }>;
+  /** `items`: a cards or process slide's items, so a voice can change one item's icon (set_icon). */
+  slides: ReadonlyArray<{ id: string; title: string; layout: string; items?: ReadonlyArray<{ title: string; text?: string; icon?: string }> }>;
 }
 
 export const PAGE_CHOICES_MAX = 9;
