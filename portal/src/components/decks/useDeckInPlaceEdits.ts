@@ -31,24 +31,6 @@ export function withDeckStyle(theme: DeckSpec['theme'], style: DeckStyleName, te
   return { ref: `${base && (BUILTINS.includes(base) || base === tenant) ? base : base === undefined ? 'product' : tenant}-${style}` };
 }
 
-/**
- * The side pane's Graphic row changes a slide's decoration through the editor's onChange alone: when that is the
- * only difference between two drafts, it is that slide and its new decoration (undefined: the style's own).
- */
-export function decorationChange(prev: DeckSpec, next: DeckSpec): { slideId: string; decoration: unknown } | null {
-  if (prev.slides.length !== next.slides.length || JSON.stringify({ ...prev, slides: [] }) !== JSON.stringify({ ...next, slides: [] })) return null;
-  let found: { slideId: string; decoration: unknown } | null = null;
-  for (const [i, a] of prev.slides.entries()) {
-    const b = next.slides[i]!;
-    if (a === b) continue;
-    const { decoration: da, ...ra } = a as unknown as Record<string, unknown>;
-    const { decoration: db, ...rb } = b as unknown as Record<string, unknown>;
-    if (a.id !== b.id || found || JSON.stringify(ra) !== JSON.stringify(rb) || JSON.stringify(da) === JSON.stringify(db)) return null;
-    found = { slideId: b.id, decoration: db };
-  }
-  return found;
-}
-
 /** Starter words for a new row's required fields: the format refuses a blank title, label or name. */
 const STARTER: Record<string, string> = { title: 'New item', label: 'New stage', name: 'New person', role: 'Role', value: '0', date: 'Date', text: 'New point' };
 
@@ -125,7 +107,7 @@ export function useDeckInPlaceEdits(input: InPlaceInput) {
 
   return {
     onRegionEdit: (slideId: string, path: string, value: unknown) => {
-      // A decoration is sent from the draft change (`onDecoration`): the side pane's Graphic row reports nothing else.
+      // A decoration is sent from the editor's onDecorationChange (`onDecoration`).
       if (path === 'decoration') return;
       send(slideId, { op: 'set_path', slideId, path, value: value ?? null }, 'Edited on the slide');
     },

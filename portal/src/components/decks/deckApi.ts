@@ -99,6 +99,8 @@ export interface DeckPickerCatalogues {
 export interface DeckPreviewResult {
   slides: DeckPreviewSlide[];
   warnings: string[];
+  /** The resolved theme's colours, for tinting the graphic picker's artwork (realtime-modules `graphicSvg`). */
+  colors?: { background: string; text: string; accent: string; accentInk: string };
 }
 
 export interface NarrativeOutcome {

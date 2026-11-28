@@ -1,0 +1,30 @@
+Fonts bundled with the deck engine (realtime-modules ./deck/fonts).
+
+They are the open halves of the metric-compatible font pairs the deck layout
+uses: a PowerPoint file names the office family, while measuring, the SVG
+preview, PNG and PDF use these files, which have the same advance widths.
+
+Carlito 1.104 (Regular, Bold, Italic)
+  Source: the google/fonts repository (ofl/carlito).
+  Licence: SIL Open Font License 1.1, Reserved Font Name "Carlito".
+  Licence text: Carlito-OFL.txt
+  Metric-compatible with Calibri (per the font's documentation; not yet
+  measured against Calibri by this project).
+
+Liberation Sans 2.1.5 (Regular, Bold, Italic)
+  Source: the official liberationfonts release, liberation-fonts-ttf-2.1.5.
+  Licence: SIL Open Font License 1.1, Reserved Font Name "Liberation".
+  Licence text: LiberationSans-LICENSE.txt
+  Metric-compatible with Arial (measured: identical advance widths for every
+  printable ASCII character, regular and bold).
+
+The files are unmodified. Under the OFL they may be bundled and redistributed
+with software; they may not be sold on their own, and a modified version may
+not use the reserved names.
+
+Gelasio (Regular, Bold, Italic)
+  Source: github.com/SorkinType/Gelasio, fonts/ttf at commit 7ab20e7e.
+  Licence: SIL Open Font License 1.1.
+  Licence text: Gelasio-OFL.txt
+  Metric-compatible with Georgia (the font's stated design goal); the
+  editorial style variant uses it for headlines, naming Georgia in PowerPoint.

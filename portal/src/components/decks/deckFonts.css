@@ -1,0 +1,14 @@
+/*
+ * The open font families the deck engine paints slides in (realtime-modules ships them with their licences;
+ * copies live in public/fonts/deck beside Carlito-OFL.txt, Gelasio-OFL.txt and LiberationSans-LICENSE.txt).
+ * Loaded with the deck editor so the in-place editor (ui-components `deckFontStack`) is set in the slide's own face.
+ */
+@font-face { font-family: 'Carlito'; src: url('/fonts/deck/Carlito-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('/fonts/deck/Carlito-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Carlito'; src: url('/fonts/deck/Carlito-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Liberation Sans'; src: url('/fonts/deck/LiberationSans-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Liberation Sans'; src: url('/fonts/deck/LiberationSans-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Liberation Sans'; src: url('/fonts/deck/LiberationSans-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gelasio'; src: url('/fonts/deck/Gelasio-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gelasio'; src: url('/fonts/deck/Gelasio-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Gelasio'; src: url('/fonts/deck/Gelasio-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }

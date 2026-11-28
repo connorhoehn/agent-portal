@@ -15,12 +15,13 @@ export function useDeckPreview(
 ) {
   // Keep the result and its render identity together. The canvas may keep
   // its last image while refreshing, but Present must use the current spec.
-  const [state, setState] = useState<{ preview: PresentationPreview; renderedKey: string | null }>({ preview: 'loading', renderedKey: null });
+  // `colors`: the newest preview's theme colours, which tint the graphic picker's artwork.
+  const [state, setState] = useState<{ preview: PresentationPreview; renderedKey: string | null; colors?: DeckPreviewResult['colors'] }>({ preview: 'loading', renderedKey: null });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controller = useRef<AbortController | null>(null);
   const lastKey = useRef<string | null>(null);
   const failed = useRef(false);
-  const cache = useRef(new Map<string, { slides: PresentationPreview; warnings: string[] }>());
+  const cache = useRef(new Map<string, { slides: PresentationPreview; warnings: string[]; colors?: DeckPreviewResult['colors'] }>());
   const warn = useRef(onWarnings);
   warn.current = onWarnings;
 
@@ -42,12 +43,12 @@ export function useDeckPreview(
     const hit = cache.current.get(requestKey);
     if (hit) {
       failed.current = false;
-      setState({ preview: hit.slides, renderedKey: key });
+      setState({ preview: hit.slides, renderedKey: key, colors: hit.colors });
       warn.current?.(hit.warnings);
       return;
     }
     setState(current => typeof current.preview === 'object' && 'slides' in current.preview
-      ? current : { preview: 'loading', renderedKey: null });
+      ? current : { preview: 'loading', renderedKey: null, colors: current.colors });
     timer.current = setTimeout(() => {
       const ctl = new AbortController();
       controller.current = ctl;
@@ -60,9 +61,9 @@ export function useDeckPreview(
       render(deckId, spec, ctl.signal).then((result) => {
         if (ctl.signal.aborted) return;
         const slides: PresentationPreview = { slides: result.slides };
-        cache.current.set(requestKey, { slides, warnings: result.warnings });
+        cache.current.set(requestKey, { slides, warnings: result.warnings, colors: result.colors });
         failed.current = false;
-        setState({ preview: slides, renderedKey: key });
+        setState({ preview: slides, renderedKey: key, colors: result.colors });
         warn.current?.(result.warnings);
       }).catch((err: unknown) => {
         if (ctl.signal.aborted) return;

@@ -92,7 +92,9 @@ export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckP
   const draft = checked.ok ? null : previewableDraft(spec);
   if (!checked.ok && !draft) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: checked.errors } };
   const valid = checked.ok ? checked : { spec: draft!.spec };
-  const preview = renderPreview(valid.spec, resolveDeckTheme(valid.spec.theme, tenant));
+  const theme = resolveDeckTheme(valid.spec.theme, tenant);
+  const preview = renderPreview(valid.spec, theme);
+  const { background, text, accent, accentInk } = theme.colors;
   return {
     ok: true,
     value: {
@@ -101,6 +103,7 @@ export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckP
       })),
       warnings: [...(draft?.unfinished ?? []), ...preview.warnings, ...exampleSourceWarnings(valid.spec)],
       findings: preview.findings,
+      colors: { background, text, accent, accentInk },
     },
   };
 }

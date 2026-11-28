@@ -20,7 +20,7 @@ import { DECK_EXPORTS, deckFileName, deckRenderKey, deckSourceOptions, revisionS
 import { ShareToSocialAction, ShareToSocialPanel } from './ShareToSocialAction';
 import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
-import { decorationChange, deckStyleOf, useDeckInPlaceEdits, withDeckStyle, type DeckStyleName } from './useDeckInPlaceEdits';
+import { deckStyleOf, useDeckInPlaceEdits, withDeckStyle, type DeckStyleName } from './useDeckInPlaceEdits';
 import { DeckFindingsLine } from './DeckFindingsLine';
 import { deckSlideFindings, withPlaceholderSources } from './deckFindings';
 import { draftRefusal, titleText, withPlaceholderTitles } from './deckRefusal';
@@ -30,7 +30,10 @@ import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { HuddleComposerDock } from '../shell/HuddleComposerDock';
 import { useComposerFocus } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import { graphicSvg, type DeckGraphicName } from '@connorhoehn/realtime-modules/deck/layout';
 import './deckReviewLayout.css';
+// The open families the slides are painted in (Carlito, Liberation Sans, Gelasio), so the in-place editor matches the slide.
+import './deckFonts.css';
 
 /** What an extras hook may read and drive: the shared document state. */
 export interface DeckEditorDocument<D> {
@@ -139,7 +142,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const compactReview = call.holds && !!callHost && !['ended', 'failed'].includes(callHost.call.phase);
   const extras = useExtras?.({ deckId, deck, revisionId, specRevisionId, setRevisionId, spec, dirtyRef, reload, setConflict }) ?? NO_EXTRAS;
   const huddlePage = huddle?.channel.startsWith('orgiq:initiative:') ? { kind: 'initiative' as const, id: huddle.channel.slice('orgiq:initiative:'.length) } : undefined;
-  const { preview, renderedKey, request } = useDeckPreview(deckId, setWarnings, previewDeck);
+  const { preview, renderedKey, request, colors } = useDeckPreview(deckId, setWarnings, previewDeck);
   // Edit in place: each slide's regions come with its preview image (the engine's `editableRegions`, in 960 x 540 points).
   const slideRegions = useMemo(() => {
     if (typeof preview !== 'object' || !('slides' in preview)) return undefined;
@@ -147,6 +150,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     for (const slide of preview.slides as ReadonlyArray<{ id: string; regions?: readonly SlideRegion[] }>) if (slide.regions) out[slide.id] = slide.regions;
     return out;
   }, [preview]);
+  // The graphic picker draws each graphic in the deck's own colours (realtime-modules 0.156.0 `graphicSvg`).
+  const graphicArtwork = useMemo(() => (colors ? (name: string) => graphicSvg(name as DeckGraphicName, colors) : undefined), [colors]);
   const latestSpec = useRef<DeckSpec | null>(null);
   latestSpec.current = spec;
   const [inPlaceError, setInPlaceError] = useState<string | null>(null);
@@ -261,8 +266,6 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     // The region and row callbacks run right after this, before React renders: they read the draft from here.
     latestSpec.current = out;
     setSpec(out);
-    const decorated = decorationChange(spec, out);
-    if (decorated) inPlace.onDecoration(decorated.slideId, decorated.decoration);
   };
   const changeStyle = (style: DeckStyleName) => {
     const next = { ...spec, theme: withDeckStyle(spec.theme, style, tenant) };
@@ -371,7 +374,9 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         onRowRemove={(slideId, list) => inPlace.onRowChange(slideId, list)}
         onRowMove={(slideId, list) => inPlace.onRowChange(slideId, list)}
         {...(pickers.icons ? { icons: pickers.icons } : {})}
-        {...(pickers.graphics ? { graphics: pickers.graphics } : {})}
+        {...(pickers.graphics ? { graphics: graphicArtwork ? { ...pickers.graphics, graphicSvg: graphicArtwork } : pickers.graphics } : {})}
+        // The editor says which decoration changed, from the side pane's Graphic row or the stage's picker (ui-components 2.551.0).
+        onDecorationChange={(slideId, decoration) => inPlace.onDecoration(slideId, decoration)}
         // No asset store yet: the picture layouts stay out of the gallery and the Layout menu.
         hiddenLayouts={IMAGE_LAYOUTS}
         deckStyle={deckStyleOf(spec.theme)}

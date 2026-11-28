@@ -901,6 +901,30 @@ async function openSlide(layout) {
 async function slideOf(id) { const h = await headSpec(vera, deckId); return { ...h, slide: (h.spec?.slides ?? []).find((s) => s.id === id) ?? null }; }
 const slideIds = async () => (await headSpec(vera, deckId)).spec?.slides?.map((s) => ({ id: s.id, layout: s.layout })) ?? [];
 
+// The newest preview answer: its regions carry `text` (realtime-modules 0.156.0), the painted font, size and colour.
+let lastPreview = null;
+page.on('response', async (r) => {
+  if (r.request().method() !== 'POST' || !/\/preview(\?|$)/.test(r.url()) || !r.ok()) return;
+  try { lastPreview = await r.json(); } catch { /* an aborted read */ }
+});
+const regionTextOf = (slideId, path) => (lastPreview?.slides ?? []).find((s) => s.id === slideId)?.regions?.find((x) => x.path === path)?.text ?? null;
+// The editor set in the slide's look: its size within 15% of the region's, scaled by the stage's width / 960, and its family the slide's.
+async function editorLook(ed, slideId, path) {
+  const want = regionTextOf(slideId, path);
+  const got = await ed.evaluate((e, r) => {
+    const c = getComputedStyle(e);
+    const svg = document.querySelector(`[data-testid="${r}"] svg, svg[data-testid="${r}"]`) ?? e.closest('[data-testid]')?.querySelector('svg');
+    const w = svg ? svg.getBoundingClientRect().width : 0;
+    // The editor sits in the SVG's own units (a foreignObject), so its computed size is scaled on screen by drawn width / layout width.
+    const scale = e.offsetWidth ? e.getBoundingClientRect().width / e.offsetWidth : 1;
+    return { fontSize: Math.round(parseFloat(c.fontSize) * scale * 10) / 10, fontFamily: c.fontFamily, color: c.color, background: c.backgroundColor, stageWidth: Math.round(w) };
+  }, R);
+  const scaled = want && got.stageWidth ? (want.fontSize * got.stageWidth) / 960 : null;
+  const sizeOk = !!scaled && Math.abs(got.fontSize - scaled) / scaled <= 0.15;
+  const familyOk = !!want && got.fontFamily.toLowerCase().includes(String(want.fontFamily).toLowerCase());
+  return { ok: sizeOk && familyOk, line: `editor ${got.fontSize}px on screen, ${got.fontFamily} (${got.color} on ${got.background}); region ${want ? `${want.fontSize}pt ${want.fontFamily}` : 'has no text style'} on a ${got.stageWidth}px stage = ${scaled ? scaled.toFixed(1) : '?'}px; size within 15% ${sizeOk}; family ${familyOk}` };
+}
+
 let firstId = '';
 await step('D12a clicking a slide title opens an editor on its box', async () => {
   await go(page, deckUrl); await stageLoaded(page, IP); await sleep(1500);
@@ -915,9 +939,11 @@ await step('D12a clicking a slide title opens an editor on its box', async () =>
   const look = await ed.evaluate((e) => { const c = getComputedStyle(e); return { color: c.color, background: c.backgroundColor, fontSize: c.fontSize, value: e.value }; });
   facts.push({ step: 'D12a', look });
   const off = Math.max(Math.abs(eb.x - box.x), Math.abs(eb.y - box.y), Math.abs(eb.w - box.w));
+  const styled = await editorLook(ed, firstId, 'title');
+  facts.push({ step: 'D12a', styled: styled.line });
   const shots = await snap(page, 'D12a-title-editor', [1440], `${R}-editor`);
   await noteDialogs();
-  return { ok: off <= 6 && noDialogs(shots), detail: `title region at ${JSON.stringify(box)}, editor at ${JSON.stringify(eb)} (largest offset ${off}px, within 6: ${off <= 6}); editor text ${look.color} on ${look.background} at ${look.fontSize}, value "${look.value}"; ${fmt(shots)}` };
+  return { ok: off <= 6 && styled.ok && noDialogs(shots), detail: `title region at ${JSON.stringify(box)}, editor at ${JSON.stringify(eb)} (largest offset ${off}px, within 6: ${off <= 6}); ${styled.line}; value "${look.value}"; ${fmt(shots)}` };
 });
 
 await step('D12b typing and Enter saves, and the preview updates', async () => {
@@ -961,6 +987,11 @@ await step('D12d select a word, then Highlight, renders emphasis', async () => {
   await sleep(400);
   const hl = page.getByRole('button', { name: /^Highlight/ }).first();
   const shown = await hl.isVisible().catch(() => false);
+  // The bar is one row beside the box, never over the words being edited (ui-components 2.551.0).
+  const bar = page.getByTestId(`${R}-emphasis-bar`);
+  const br = (await bar.count()) ? await rectOf(bar) : null;
+  const er = await rectOf(ed);
+  const overlaps = !!br && br.x < er.x + er.w && er.x < br.x + br.w && br.y < er.bottom && er.y < br.bottom;
   const shots = await snap(page, 'D12d-emphasis-toolbar', [1440], `${E}-stage`);
   const before = await stageSrc(page, IP);
   const posted = opsPost();
@@ -975,7 +1006,7 @@ await step('D12d select a word, then Highlight, renders emphasis', async () => {
   const marked = !!runs && runs.some((r) => r.emphasis === 'highlight' && /Auth/.test(r.text));
   const after = await snap(page, 'D12d-emphasis-saved', [1440], `${E}-stage`);
   await noteDialogs();
-  return { ok: shown && !!res && res.ok() && marked && changed && noDialogs([...shots, ...after]), detail: `Highlight shown above the box ${shown}; operations POST ${res ? res.status() : 'none'}; saved title ${JSON.stringify(slide?.title)}; preview changed ${changed}; ${fmt(after)}` };
+  return { ok: shown && !!br && !overlaps && !!res && res.ok() && marked && changed && noDialogs([...shots, ...after]), detail: `Highlight shown ${shown}; bar ${JSON.stringify(br)} clear of the editor ${JSON.stringify(er)} ${!!br && !overlaps}; operations POST ${res ? res.status() : 'none'}; saved title ${JSON.stringify(slide?.title)}; preview changed ${changed}; ${fmt(after)}` };
 });
 
 let cardsId = '';
@@ -1055,6 +1086,15 @@ await step('D12h choosing a decoration', async () => {
   const toggle = page.getByTestId(`${E}-decoration-toggle`);
   if (!/done/i.test(await toggle.innerText().catch(() => ''))) { await toggle.click(); await sleep(500); }
   const picker = page.getByTestId(`${E}-decoration`);
+  // The tiles draw the engine's artwork (graphicSvg), and the placement row fits the pane.
+  const artOf = () => picker.evaluate((e) => {
+    const tiles = [...e.querySelectorAll('button, [role="radio"], [role="option"]')].filter((b) => !/placement|toggle/.test(b.getAttribute('data-testid') ?? ''));
+    const withSvg = tiles.filter((b) => b.querySelector('svg path, svg rect, svg circle, svg polygon')).length;
+    const pl = e.querySelector('[data-testid$="-placement"]');
+    return { tiles: tiles.length, withSvg, placement: pl ? { scrollWidth: pl.scrollWidth, clientWidth: pl.clientWidth } : null };
+  });
+  let art = await artOf().catch(() => ({ tiles: 0, withSvg: 0, placement: null }));
+  const artShots = await snap(page, 'D12h-graphic-picker', [1440], `${E}-decoration`);
   const choices = picker.locator('button:not([data-testid$="-toggle"]):not([role="tab"]), [role="radio"], [role="option"]');
   const target = cardsId || (await slideIds())[0]?.id;
   const n = await choices.count();
@@ -1067,9 +1107,12 @@ await step('D12h choosing a decoration', async () => {
   const changed = await waitSrcChange(page, IP, before, 15000);
   await stageLoaded(page, IP); await sleep(1200);
   const { slide } = await slideOf(target);
+  // The placement row shows once a graphic is chosen.
+  if (!art.placement) art = { ...art, placement: (await artOf().catch(() => ({ placement: null }))).placement };
+  const placementFits = !!art.placement && art.placement.scrollWidth <= art.placement.clientWidth;
   const shots = await snap(page, 'D12h-decoration', [1440], `${E}-stage`);
   await noteDialogs();
-  return { ok: !!picked && !!slide?.decoration?.graphic && changed && noDialogs(shots), detail: `${n} choices; picked "${picked}"; saved decoration ${JSON.stringify(slide?.decoration)}; stage changed ${changed}; ${fmt(shots)}` };
+  return { ok: !!picked && !!slide?.decoration?.graphic && changed && art.withSvg >= 4 && placementFits && noDialogs([...artShots, ...shots]), detail: `artwork in ${art.withSvg} of ${art.tiles} tiles; placement ${JSON.stringify(art.placement)} fits ${placementFits}; ${n} choices; picked "${picked}"; saved decoration ${JSON.stringify(slide?.decoration)}; stage changed ${changed}; ${fmt(shots)}` };
 });
 
 await step('D12i no form fields below the stage, and the stage fills the column', async () => {
