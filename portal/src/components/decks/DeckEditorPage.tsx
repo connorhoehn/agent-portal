@@ -6,8 +6,8 @@
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Banner, Button, DetailSection, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
-import { addSlide, canSaveDeck, DeckReader, EditorShell, LayoutGallery, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext, type SlideLayout } from '@connorhoehn/ui-components/doc-editor';
+import { Banner, Button, DetailSection, InlineAlert, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
+import { addSlide, canSaveDeck, DeckReader, validateDeckSpec, EditorShell, LayoutGallery, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext, type SlideLayout } from '@connorhoehn/ui-components/doc-editor';
 import { usePublishPageContext, usePublishPageTabs } from '../../lib/voice/pageContext';
 import { DeckReportChartPanel, SAVE_FIRST_LINE } from './DeckReportChartPanel';
 import { DECK_REVISED_EVENT, DECK_TENANT_THEME_NAMES, layoutPreviewMap, listChartReports, listDeckLayouts, type DeckChartReport } from './deckApi';
@@ -22,6 +22,7 @@ import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
 import { DeckFindingsLine } from './DeckFindingsLine';
 import { withPlaceholderSources } from './deckFindings';
+import { draftRefusal, newSlideIds, withPlaceholderTitles } from './deckRefusal';
 import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
@@ -89,6 +90,7 @@ export interface DeckEditorPageProps<D extends DeckDocumentShape & { title: stri
 }
 
 const NO_EXTRAS: DeckEditorExtras = {};
+const validation = (spec: DeckSpec): readonly string[] => { const out = validateDeckSpec(spec); return out.ok ? [] : out.errors; };
 
 export function DeckEditorPage<D extends DeckDocumentShape & { title: string }>(props: DeckEditorPageProps<D>) {
   // A previous document's pending loads/saves cannot populate a new editor.
@@ -102,6 +104,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reportPanel, setReportPanel] = useState(false);
   const [sharePanel, setSharePanel] = useState(false);
+  const [titleToSelect, setTitleToSelect] = useState<string | null>(null);
   const savingNow = useRef(false);
   const focus = useShellFocusMode();
   // Presenting in place holds focus mode: the page's own chrome (findings, assistant pane, head actions) steps aside with the rails.
@@ -150,6 +153,16 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     window.addEventListener(DECK_REVISED_EVENT, onRevised);
     return () => window.removeEventListener(DECK_REVISED_EVENT, onRevised);
   }, [deckId, dirtyRef, reload, setRevisionId]);
+  // The library's slide form has no focus API (docs/ui-components-queue.md): once the new slide's form shows, select its title.
+  useEffect(() => {
+    if (!titleToSelect || collab.selectedSlideId !== titleToSelect) return;
+    const timer = window.setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>(`[data-testid="${testIdPrefix}-editor-slide-title"]`);
+      if (input) { input.focus({ preventScroll: true }); input.select(); }
+      setTitleToSelect(null);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [titleToSelect, collab.selectedSlideId, testIdPrefix]);
   const cannotEditNow = deck ? (typeof readOnly === 'function' ? readOnly(deck) : readOnly) : true;
   usePublishPageContext(deck && spec ? deckVoiceContext({
     path: location.pathname, tenant, deckId, title: deck.title, spec, headRevisionId: deck.activeRevisionId,
@@ -173,9 +186,11 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const cannotEdit = typeof readOnly === 'function' ? readOnly(deck) : readOnly;
   const currentVersion = revisionId ? `v${revisionSeq(deck.revisions, revisionId)}` : 'Versions';
   const hasSources = !!spec && canSaveDeck(spec);
-  const saveDisabled = cannotEdit || saving || !dirty || !hasSources;
+  // The format's own check, said plainly ("Slide 2 needs a title."): Save stays off while the server would refuse the draft.
+  const refusal = spec && dirty && !cannotEdit ? draftRefusal(validation(spec)) : null;
+  const saveDisabled = cannotEdit || saving || !dirty || !hasSources || !!refusal;
   const saveHint = cannotEdit ? 'This presentation is read-only.' : !dirty ? 'All changes saved.'
-    : !hasSources ? 'Add a source to each slide before saving.' : `Save as ${nextRevisionLabel(deck.revisions)}`;
+    : !hasSources ? 'Add a source to each slide before saving.' : refusal ? `Not saved yet: ${refusal}` : `Save as ${nextRevisionLabel(deck.revisions)}`;
   const saveChanges = async () => {
     if (!spec || saveDisabled || savingNow.current) return;
     savingNow.current = true;
@@ -187,7 +202,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const notices = (
     <>
       {extras.notices}
-      {saveError && !conflict && <Banner variant="error" title="Presentation could not be saved">{saveError}</Banner>}
+      {saveError && !conflict && <Banner variant="error" title="Presentation could not be saved" data-testid={`${testIdPrefix}-save-error`}>{saveError}</Banner>}
+      {refusal && !presenting && <InlineAlert tone="warning" data-testid={`${testIdPrefix}-save-blocked`}>{`Before saving: ${refusal}`}</InlineAlert>}
       {downloadError && <Banner variant="error" title="Presentation could not be downloaded" data-testid={`${testIdPrefix}-download-error`}>{downloadError}</Banner>}
       {collab.presence.editingElsewhere && (
         <Banner variant="warning" title={`You have unsaved edits to this ${noun} in another tab`} data-testid={`${testIdPrefix}-editing-elsewhere`} />
@@ -219,13 +235,19 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const themes = [{ id: tenant, name: DECK_TENANT_THEME_NAMES[tenant] }];
   // A slide added in the editor cites the server's placeholder (`example:unsourced`), as `add_slide` does:
   // Save stays on, the preview draws it, and the findings line asks for the real source.
-  const editSpec = (next: DeckSpec) => setSpec(withPlaceholderSources(spec, next));
+  // A new slide also starts with its layout's placeholder title ("Timeline", "Key figures"), selected for typing over.
+  const withNewSlideDefaults = (next: DeckSpec) => withPlaceholderTitles(spec, withPlaceholderSources(spec, next));
+  const editSpec = (next: DeckSpec) => {
+    const added = newSlideIds(spec, next);
+    setSpec(withNewSlideDefaults(next));
+    if (added.length === 1) setTitleToSelect(added[0]!);
+  };
   const addLayout = (layout: SlideLayout) => {
-    const next = withPlaceholderSources(spec, addSlide(spec, selectedIndex, layout));
+    const next = withNewSlideDefaults(addSlide(spec, selectedIndex, layout));
     setSpec(next);
     const added = next.slides[selectedIndex + 1];
     closeLayouts();
-    if (added) collab.selectSlide(added.id);
+    if (added) { collab.selectSlide(added.id); setTitleToSelect(added.id); }
   };
   const layoutsPanel = (
     <DetailSection title="Example layouts" hint={`Choosing one adds it after slide ${selectedIndex + 1}`}

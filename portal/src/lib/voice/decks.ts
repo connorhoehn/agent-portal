@@ -14,6 +14,7 @@ import { UPDATE_ACTIONS } from './catalogue.ts';
 import { done, failed, once, refused, NOT_ON_PAGE, type ConfirmPlan, type ToolContext, type ToolResult } from './tools.ts';
 import type { PageDeck } from './pageContext.ts';
 import { announceDeckRevision, deckOpPaths, type DeckOperation } from '../../components/decks/deckApi.ts';
+import { plainDeckRefusal } from '../../components/decks/deckRefusal.ts';
 
 type Rec = Record<string, unknown>;
 
@@ -197,7 +198,9 @@ export function runDeckOperations(ctx: ToolContext, plan: DeckOpsPlan): Promise<
       }
     }
     if (!res) return failed('Could not reach the server; the deck was not changed.');
-    const error = typeof body?.['error'] === 'string' && body['error'].trim() ? body['error'].trim() : null;
+    const raw = typeof body?.['error'] === 'string' && body['error'].trim() ? body['error'].trim() : null;
+    // The validator's lines said plainly ("Slide 2 needs a title."), as the page says them.
+    const error = raw ? plainDeckRefusal(raw, Array.isArray(body?.['errors']) ? (body!['errors'] as unknown[]).filter((e): e is string => typeof e === 'string') : []) : null;
     if (!res.ok) {
       // The server's own sentence: a report below the role's tier, nothing to chart, a locked slide, a stale head.
       if (res.status === 409 && typeof body?.['activeRevisionId'] === 'string') return refused('Someone saved a newer version of this deck again; nothing was changed. Ask again in a moment.', { code: 'stale-revision' });

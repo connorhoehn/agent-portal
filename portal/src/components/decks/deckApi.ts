@@ -8,6 +8,7 @@
 // type comes from the library as a type-only import.
 
 import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
+import { plainDeckRefusal } from './deckRefusal.ts';
 
 export type { DeckSpec };
 
@@ -128,9 +129,11 @@ async function errorBody(res: Response): Promise<{ message: string; activeRevisi
     const nested = body.error && typeof body.error === 'object' ? (body.error as { message?: unknown }).message : undefined;
     const sentence = [body.error, nested, body.message, body.reason].find((v): v is string => typeof v === 'string' && !!v.trim());
     if (sentence) message = sentence.trim();
-    if (Array.isArray(body.errors) && body.errors.length > 0) {
-      message = `${message}: ${body.errors.filter((e) => typeof e === 'string').join('; ')}`;
-    }
+    const errors = Array.isArray(body.errors) ? body.errors.filter((e): e is string => typeof e === 'string') : [];
+    // The validator's lines ("slides[1].title: required") become "Slide 2 needs a title."; anything else keeps the server's words.
+    const plain = plainDeckRefusal(message, errors);
+    if (plain !== message) message = plain;
+    else if (errors.length > 0) message = `${message}: ${errors.join('; ')}`;
     if (typeof body.activeRevisionId === 'string') activeRevisionId = body.activeRevisionId;
   } catch { /* not JSON */ }
   return { message, ...(activeRevisionId ? { activeRevisionId } : {}) };
