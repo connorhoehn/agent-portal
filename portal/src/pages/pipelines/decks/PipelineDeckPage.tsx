@@ -42,6 +42,7 @@ function usePipelineRuns(doc: DeckEditorDocument<RunDeckDetail>): DeckEditorExtr
   const { can, ready } = useCapabilities();
   const { deckId } = doc;
   return useDeckAgentRun(doc, {
+    operationsTenant: 'pipelines',
     canInstruct: ready && can('RunPipeline'),
     hints: INSTRUCT_HINTS,
     revise: reviseRunDeck,

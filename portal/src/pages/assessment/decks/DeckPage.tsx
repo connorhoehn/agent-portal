@@ -33,6 +33,7 @@ const DECK_API: DeckDocumentApi<DeckDetail> = {
 function useAssessmentRuns(doc: DeckEditorDocument<DeckDetail>): DeckEditorExtras {
   const { can, ready } = useCapabilities();
   return useDeckAgentRun(doc, {
+    operationsTenant: 'assessment',
     canInstruct: ready && can('RunAssessmentAgent'),
     hints: INSTRUCT_HINTS,
     revise: reviseDeck,

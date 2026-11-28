@@ -42,6 +42,7 @@ function useInitiativeRevise(doc: DeckEditorDocument<InitiativeDeckDetail>): Dec
   const { can, ready } = useCapabilities();
   return useDeckAgentRun(doc, {
     questionAgent: 'orgiq-supervisor',
+    operationsTenant: 'orgiq',
     canInstruct: ready && can('DispatchAgentRun') && doc.deck?.onInitiative !== false,
     hints: INSTRUCT_HINTS,
     reviseNow: reviseInitiativeDeck,

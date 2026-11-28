@@ -35,6 +35,7 @@ const INSTRUCT_HINTS = ['Tighten the bullets', 'Make the title shorter', 'Add sp
 /** The shared inline agent revise on this tenant's route; only a writer (`canEdit`) is offered it. */
 function useSocialRevise(doc: DeckEditorDocument<SocialDeckDetail>): DeckEditorExtras {
   return useDeckAgentRun(doc, {
+    operationsTenant: 'social',
     canInstruct: doc.deck?.canEdit === true,
     hints: INSTRUCT_HINTS,
     reviseNow: reviseSocialDeck,

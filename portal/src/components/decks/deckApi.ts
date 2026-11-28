@@ -286,6 +286,8 @@ export const DECK_TENANT_THEME_NAMES: Readonly<Record<DeckTenantId, string>> = {
 
 export const deckOpPaths = {
   operations: (tenant: DeckTenantId, deckId: string) => `${DECK_ROOTS[tenant]}/${enc(deckId)}/operations`,
+  /** The composer's proposal: checked against the head, never saved (middleware lib/deck-shared/propose.ts). */
+  proposal: (tenant: DeckTenantId, deckId: string) => `${DECK_ROOTS[tenant]}/${enc(deckId)}/operations/proposal`,
   chartReports: (tenant: DeckTenantId, deckId: string) => `${DECK_ROOTS[tenant]}/${enc(deckId)}/chart-reports`,
   templates: (tenant: DeckTenantId) => `${DECK_TENANT_BASES[tenant]}/deck-templates`,
   layouts: (tenant: DeckTenantId) => `${DECK_TENANT_BASES[tenant]}/deck-layouts`,
@@ -326,6 +328,27 @@ export const listChartReports = (tenant: DeckTenantId, deckId: string, signal?: 
 /** All or none, on the saved head. A stale base rejects with `DeckRevisionConflictError`; any other refusal with the server's sentence. */
 export const applyDeckOperations = (tenant: DeckTenantId, deckId: string, body: { baseRevisionId: string; operations: DeckOperation[]; label?: string }): Promise<DeckOperationsResult> =>
   deckPost(deckOpPaths.operations(tenant, deckId), body);
+
+/** The agent's proposed edit, checked on `baseRevisionId` and not yet saved: Apply sends `operations` unchanged. */
+export interface DeckOperationsProposal {
+  reply: string;
+  baseRevisionId: string;
+  operations: DeckOperation[];
+  /** One plain line per operation ("Change slide 3 from bullets to kpi"). */
+  lines: string[];
+  /** A slide would be removed. */
+  destructive: boolean;
+  touchedSlideIds: string[];
+  findings: unknown[];
+  /** The validator refused the list: nothing can be applied, and this says why. */
+  refusal?: { reason: string; errors?: string[] };
+  engine: 'agent' | 'offline' | 'fallback';
+  reason?: string;
+}
+
+/** Asks the agent for operations on the saved head; nothing is saved. A stale base rejects with `DeckRevisionConflictError`. */
+export const proposeDeckOperations = (tenant: DeckTenantId, deckId: string, body: { baseRevisionId: string; instruction: string; slideId?: string }): Promise<DeckOperationsProposal> =>
+  deckPost(deckOpPaths.proposal(tenant, deckId), body);
 
 /** The layout previews `PresentationEditor layoutPreviews` / `LayoutGallery previews` take: layout → SVG source. */
 export function layoutPreviewMap(layouts: readonly DeckLayoutExample[]): Record<string, string> {

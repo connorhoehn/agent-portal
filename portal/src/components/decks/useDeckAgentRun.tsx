@@ -11,7 +11,10 @@ import { useFlowRun } from '../../hooks/useFlowRun';
 import { DeckComposer } from './DeckComposer';
 import { DeckRunProgress } from './DeckRunProgress';
 import type { DeckEditorDocument, DeckEditorExtras } from './DeckEditorPage';
-import { DeckRevisionConflictError, type DeckDetailCore, type DeckReviseResult, type DeckRunState } from './deckApi';
+import {
+  applyDeckOperations, DeckRevisionConflictError, proposeDeckOperations,
+  type DeckDetailCore, type DeckOperationsProposal, type DeckReviseResult, type DeckRunState, type DeckTenantId,
+} from './deckApi';
 import { failedLastRun, generatingIds, hasPendingRun, isRunFinished, openRevisionId, runFailureMessage, revisionSeq } from './decksModel';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
@@ -29,6 +32,8 @@ interface DeckAgentRunBase {
   progressTitle: (deck: DeckDetailCore) => string;
   /** Offer the deck's own source options on slides. */
   sourceOptions?: boolean;
+  /** The tenant whose `<deck>/:id/operations` routes this deck answers: Edit then proposes typed operations for structure and style requests. */
+  operationsTenant?: DeckTenantId;
 }
 
 /** Assessment, pipelines: the revise starts a run, which the page follows. */
@@ -153,6 +158,34 @@ export function useDeckAgentRun<D extends DeckDetailCore & { title: string }>(do
     };
   }, [deckId, revisionId, cfg.revise, cfg.reviseNow, cfg.canInstruct]);
 
+  // Edit's operations mode: a proposal on the saved head, applied only by the person's click.
+  const tenant = cfg.operationsTenant;
+  const propose = useCallback(async (instruction: string, ctx: PresentationInstructContext): Promise<DeckOperationsProposal> => {
+    if (!tenant) throw new Error('The agent cannot propose edits on this deck.');
+    if (!cfg.canInstruct) throw new Error('This presentation is read-only. Ask a question instead.');
+    if (dirtyRef.current) throw new Error('Save your edits first: the agent changes the saved version.');
+    if (!revisionId) throw new Error('There is no saved version to change.');
+    try {
+      return await proposeDeckOperations(tenant, deckId, { baseRevisionId: revisionId, instruction, ...(ctx.slideId ? { slideId: ctx.slideId } : {}) });
+    } catch (err) {
+      if (err instanceof DeckRevisionConflictError) { setConflict(true); void reload(); }
+      throw err;
+    }
+  }, [tenant, deckId, revisionId, cfg.canInstruct]);
+  const applyProposal = useCallback(async (p: DeckOperationsProposal): Promise<PresentationInstructResult> => {
+    if (!tenant) throw new Error('The agent cannot change this deck.');
+    if (dirtyRef.current) throw new Error('Save your edits first: the change applies to the saved version.');
+    try {
+      const out = await applyDeckOperations(tenant, deckId, { baseRevisionId: p.baseRevisionId, operations: p.operations, label: 'Agent proposal, applied' });
+      const next = await reload();
+      if (next && !dirtyRef.current) setRevisionId(out.revision.id);
+      return { summary: out.summary, changedSlideIds: out.touchedSlideIds };
+    } catch (err) {
+      if (err instanceof DeckRevisionConflictError) { setConflict(true); void reload(); }
+      throw err;
+    }
+  }, [tenant, deckId]);
+
   const lastFailure = deck ? failedLastRun(deck) : null;
   const notices = deck ? (
     <>
@@ -186,6 +219,7 @@ export function useDeckAgentRun<D extends DeckDetailCore & { title: string }>(do
           deckTitle={deck.title}
           hints={cfg.hints}
           instruct={instruct}
+          {...(tenant && cfg.canInstruct ? { propose, applyProposal } : {})}
           canInstruct={cfg.canInstruct} canAsk={canAsk} askUnavailableReason={askUnavailableReason}
           onAsk={(text, context, withReference) => ask(text, context, withReference, ctx.selectedGeneratedSlide?.title)}
           onChanged={ctx.markChanged}
