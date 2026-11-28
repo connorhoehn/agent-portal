@@ -18,6 +18,10 @@ import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
 import type { OperationsOut } from './operations.js';
 import type { ProposeOut } from './propose.js';
 import { listLayouts, listTemplates, readTemplate } from './templates.js';
+import { GRAPHICS_CATALOGUE, ICON_CATALOGUE, ICON_PATHS } from '@connorhoehn/realtime-modules/deck/layout';
+
+/** The icon catalogue with its stroked 24 x 24 path data, and the graphics catalogue (labels only). */
+const DECK_PICKER_CATALOGUES = { icons: { items: ICON_CATALOGUE, paths: ICON_PATHS }, graphics: { items: GRAPHICS_CATALOGUE } };
 import type { DeckHostTenant } from './themes.js';
 
 export function sendFail(res: Response, result: { status: number; reason: string; details?: Record<string, unknown> }): void {
@@ -188,6 +192,7 @@ export function makeTemplateHandlers(tenant: DeckHostTenant) {
     if (!out) { res.status(404).json({ error: 'template not found' }); return; }
     res.json(out);
   };
-  const layouts: RequestHandler = (_req, res) => { res.json(listLayouts(tenant)); };
+  // The gallery's layouts, plus the engine's icon and graphic catalogues for the editor's pickers (the browser never loads the engine).
+  const layouts: RequestHandler = (_req, res) => { res.json({ ...listLayouts(tenant), ...DECK_PICKER_CATALOGUES }); };
   return { list, read, layouts };
 }

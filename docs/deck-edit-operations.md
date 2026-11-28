@@ -36,6 +36,7 @@ Body: `{ baseRevisionId, operations: [...], label? }`. At most 10 operations; th
 | `set_style` | `style`: `bold`, `editorial`, `minimal`, `playful`, `corporate` | deck level |
 | `set_decoration` | `slideId`, `decoration`: `{ graphic, placement? }`, `'none'`, or `null` | `graphic` is a catalogue name (blob, waves, dots, badge-seal, timeline, rocket, …); `placement` is `corner`, `background` or `title`. `'none'` removes the style's own decoration from the slide; `null` gives it back. |
 | `set_emphasis` | `slideId`, `target`: `'title'` or `{ bullet: n }`, `from`, `to?`, `emphasis` (`highlight`, `accent`, `bold`, `underline`, `outline`, `gradient`) or `null` | words counted from 1, `to` defaults to `from`; the other runs keep their emphasis; `null` clears; a space between two marked words joins the run before it |
+| `set_path` | `slideId`, `path`, `value` (`null` clears an optional field) | one field edited in place on the slide, addressed by the engine's path grammar (`title`, `bullets[2]`, `items[1].icon`, `table.rows[0][2]`, `deck.subtitle`; realtime-modules 0.154.0); a path the slide's layout does not paint is refused, and the whole deck is validated again like every operation. The editor sends it for each click-to-edit on the stage; a row added, removed or moved there is a `set_fields` of that list, a graphic chosen in the side pane a `set_decoration`, a style a `set_style`. It is not offered to the drafter's proposals or the voice. |
 
 ### Layouts
 

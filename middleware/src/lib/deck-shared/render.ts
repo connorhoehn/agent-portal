@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto';
 import JSZip from 'jszip';
 import { deckWarnings, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
-import { layoutDeck, type DeckLayout, type DeckThemeSpec, type FontMetrics, type LayoutFinding } from '@connorhoehn/realtime-modules/deck/layout';
+import { editableRegions, layoutDeck, type DeckLayout, type EditableRegion, type DeckThemeSpec, type FontMetrics, type LayoutFinding } from '@connorhoehn/realtime-modules/deck/layout';
 import { loadBundledFonts, type FontFileSet } from '@connorhoehn/realtime-modules/deck/fonts';
 import { paintSvg } from '@connorhoehn/realtime-modules/deck/paint-svg';
 import { paintPptx, PPTX_SCENE_CONTENT_TYPE } from '@connorhoehn/realtime-modules/deck/paint-pptx';
@@ -29,7 +29,7 @@ import { paintPng } from '@connorhoehn/realtime-modules/deck/paint-png';
 import { ByteLru } from './byte-lru.js';
 
 /** The installed engine (realtime-modules) version; part of every cache key. A test holds it to the installed package. */
-export const DECK_ENGINE_VERSION = '0.153.0';
+export const DECK_ENGINE_VERSION = '0.154.0';
 
 /** How long one render may take before the request is answered 503. */
 export const DECK_RENDER_BUDGET_MS = 20_000;
@@ -91,7 +91,8 @@ export function findingWarning(finding: LayoutFinding, layout: DeckLayout): stri
 }
 
 export interface DeckPreviewRender {
-  slides: Array<{ id: string; svg: string; title: string }>;
+  /** `regions`: where each editable field sits, in stage points (960 x 540), for editing in place; none on the Sources slide. */
+  slides: Array<{ id: string; svg: string; title: string; regions?: EditableRegion[] }>;
   /** The spec's advisory warnings, then one sentence per layout finding. */
   warnings: string[];
   findings: LayoutFinding[];
@@ -129,6 +130,24 @@ function rasterPreviewSlide(scene: DeckLayout['scenes'][number], stage: DeckLayo
   return svg;
 }
 
+/** Editable regions per slide, cached beside the painted slides by the scene and the slide's spec. */
+export const previewRegionCache = new ByteLru<EditableRegion[]>(4 * 1024 * 1024, (r) => JSON.stringify(r).length);
+
+const tenth = (n: number): number => Math.round(n * 10) / 10;
+
+/** The engine's regions for one slide, with boxes rounded to a tenth of a point to keep the preview lean. */
+function slideRegions(scene: DeckLayout['scenes'][number], spec: DeckSpec): EditableRegion[] | undefined {
+  const slide = spec.slides.find((s) => s.id === scene.id);
+  if (!slide) return undefined;
+  const key = createHash('sha256').update(`${DECK_ENGINE_VERSION}|`).update(JSON.stringify(scene)).update('|')
+    .update(JSON.stringify(slide)).update(scene.index === 0 ? `|${spec.subtitle ?? ''}` : '').digest('hex');
+  const hit = previewRegionCache.get(key);
+  if (hit) return hit;
+  const regions = editableRegions(scene, { slide, spec }).map((r) => ({ ...r, box: { x: tenth(r.box.x), y: tenth(r.box.y), w: tenth(r.box.w), h: tenth(r.box.h) } }));
+  previewRegionCache.set(key, regions);
+  return regions;
+}
+
 /**
  * One slide image per slide (Sources last) and the warnings, for a validated
  * spec. Each slide's `svg` wraps a PNG painted with the bundled fonts (the
@@ -139,7 +158,10 @@ export function renderPreview(spec: DeckSpec, theme: DeckThemeSpec, mode: 'png' 
   const layout = layoutSpec(spec, theme);
   const svgs = mode === 'vector' ? paintSvg(layout) : layout.scenes.map((scene) => rasterPreviewSlide(scene, layout.stage));
   return {
-    slides: layout.scenes.map((scene, i) => ({ id: scene.id, svg: svgs[i]!, title: scene.title })),
+    slides: layout.scenes.map((scene, i) => {
+      const regions = slideRegions(scene, spec);
+      return { id: scene.id, svg: svgs[i]!, title: scene.title, ...(regions ? { regions } : {}) };
+    }),
     warnings: [...deckWarnings(spec), ...layout.findings.map((f) => findingWarning(f, layout))],
     findings: layout.findings,
   };

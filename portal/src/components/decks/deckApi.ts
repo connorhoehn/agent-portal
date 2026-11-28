@@ -78,6 +78,22 @@ export interface DeckPreviewSlide {
   svg: string;
   title?: string;
   generated?: boolean;
+  /** Where each editable field sits, in stage points (960 x 540): the engine's `editableRegions` (realtime-modules 0.154.0). */
+  regions?: DeckEditableRegion[];
+}
+
+export interface DeckEditableRegion {
+  path: string;
+  kind: 'text' | 'runs' | 'icon' | 'graphic' | 'chart' | 'image' | 'figure';
+  box: { x: number; y: number; w: number; h: number };
+  value?: unknown;
+}
+
+/** The engine's catalogues for the editor's pickers, served with the layouts (`GET <tenant>/deck-layouts`). */
+export interface DeckCatalogueEntry { name: string; label: string; category: string; keywords: readonly string[] }
+export interface DeckPickerCatalogues {
+  icons?: { items: DeckCatalogueEntry[]; paths: Record<string, readonly string[]> };
+  graphics?: { items: DeckCatalogueEntry[] };
 }
 
 export interface DeckPreviewResult {
@@ -310,8 +326,9 @@ export type DeckOperation =
   | { op: 'set_chart'; slideId: string; kind: DeckChartKindId; report: { report: string; params?: Record<string, string> } }
   | { op: 'set_style'; style: string }
   | { op: 'change_layout'; slideId: string; layout: string }
-  | { op: 'set_decoration'; slideId: string; decoration: 'none' | { graphic: string } }
-  | { op: 'set_fields'; slideId: string; fields: { items: Array<{ title: string; text?: string; icon?: string }> } }
+  | { op: 'set_decoration'; slideId: string; decoration: 'none' | null | { graphic: string; placement?: string } }
+  | { op: 'set_fields'; slideId: string; fields: Record<string, unknown> }
+  | { op: 'set_path'; slideId: string; path: string; value: unknown }
   | { op: 'set_emphasis'; slideId: string; target: 'title' | { bullet: number }; from: number; to?: number; emphasis: string | null };
 
 export interface DeckOperationsResult {
@@ -321,7 +338,7 @@ export interface DeckOperationsResult {
 
 export const listDeckTemplates = (tenant: DeckTenantId, signal?: AbortSignal): Promise<{ templates: DeckTemplateSummary[] }> =>
   deckCall(deckOpPaths.templates(tenant), signal ? { signal } : {});
-export const listDeckLayouts = (tenant: DeckTenantId, signal?: AbortSignal): Promise<{ layouts: DeckLayoutExample[] }> =>
+export const listDeckLayouts = (tenant: DeckTenantId, signal?: AbortSignal): Promise<{ layouts: DeckLayoutExample[] } & DeckPickerCatalogues> =>
   deckCall(deckOpPaths.layouts(tenant), signal ? { signal } : {});
 export const listChartReports = (tenant: DeckTenantId, deckId: string, signal?: AbortSignal): Promise<{ reports: DeckChartReport[] }> =>
   deckCall(deckOpPaths.chartReports(tenant, deckId), signal ? { signal } : {});

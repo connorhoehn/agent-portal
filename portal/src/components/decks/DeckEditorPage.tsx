@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Banner, Button, InlineAlert, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
-import { canSaveDeck, DeckReader, validateDeckSpec, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehn/ui-components/doc-editor';
+import { canSaveDeck, DeckReader, validateDeckSpec, EditorShell, IMAGE_LAYOUTS, PresentationEditor, nextRevisionLabel, type DeckGraphicSource, type DeckIconSource, type PresentationEditorFrame, type PresentationFooterContext, type SlideRegion } from '@connorhoehn/ui-components/doc-editor';
 import { usePublishPageContext, usePublishPageTabs } from '../../lib/voice/pageContext';
 import { DeckReportChartPanel, SAVE_FIRST_LINE } from './DeckReportChartPanel';
 import { DECK_REVISED_EVENT, DECK_TENANT_THEME_NAMES, layoutPreviewMap, listChartReports, listDeckLayouts, type DeckChartReport } from './deckApi';
@@ -20,6 +20,7 @@ import { DECK_EXPORTS, deckFileName, deckRenderKey, deckSourceOptions, revisionS
 import { ShareToSocialAction, ShareToSocialPanel } from './ShareToSocialAction';
 import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
+import { decorationChange, deckStyleOf, useDeckInPlaceEdits, withDeckStyle, type DeckStyleName } from './useDeckInPlaceEdits';
 import { DeckFindingsLine } from './DeckFindingsLine';
 import { deckSlideFindings, withPlaceholderSources } from './deckFindings';
 import { draftRefusal, titleText, withPlaceholderTitles } from './deckRefusal';
@@ -90,6 +91,7 @@ export interface DeckEditorPageProps<D extends DeckDocumentShape & { title: stri
 }
 
 const NO_EXTRAS: DeckEditorExtras = {};
+const NO_REGIONS: Readonly<Record<string, readonly SlideRegion[]>> = {};
 const validation = (spec: DeckSpec): readonly string[] => { const out = validateDeckSpec(spec); return out.ok ? [] : out.errors; };
 
 export function DeckEditorPage<D extends DeckDocumentShape & { title: string }>(props: DeckEditorPageProps<D>) {
@@ -123,8 +125,8 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const focusConversation = composerFocus.present ? () => composerFocus.request({ mode: 'agent' }) : undefined;
   const collab = useDeckCollaboration();
   const {
-    deck, loadError, reload, revisionId, specRevisionId, setRevisionId, spec, setSpec, specError, conflict, setConflict,
-    dirty, dirtyRef, active, editorRevisions, save, loadLatest, selectRevision,
+    deck, loadError, reload, revisionId, specRevisionId, setRevisionId, spec, savedSpec, setSpec, specError, conflict, setConflict,
+    dirty, dirtyRef, active, editorRevisions, save, loadLatest, selectRevision, adoptRevision,
   } = useDeckDocument(deckId, api, { ...(canAutoOpen ? { canAutoOpen } : {}), followLatest: props.followLatest });
   useCrumbLabel(deckId, deck?.title);
   const huddle = deck ? props.huddle?.(deck) : null;
@@ -138,12 +140,35 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const extras = useExtras?.({ deckId, deck, revisionId, specRevisionId, setRevisionId, spec, dirtyRef, reload, setConflict }) ?? NO_EXTRAS;
   const huddlePage = huddle?.channel.startsWith('orgiq:initiative:') ? { kind: 'initiative' as const, id: huddle.channel.slice('orgiq:initiative:'.length) } : undefined;
   const { preview, renderedKey, request } = useDeckPreview(deckId, setWarnings, previewDeck);
+  // Edit in place: each slide's regions come with its preview image (the engine's `editableRegions`, in 960 x 540 points).
+  const slideRegions = useMemo(() => {
+    if (typeof preview !== 'object' || !('slides' in preview)) return undefined;
+    const out: Record<string, readonly SlideRegion[]> = {};
+    for (const slide of preview.slides as ReadonlyArray<{ id: string; regions?: readonly SlideRegion[] }>) if (slide.regions) out[slide.id] = slide.regions;
+    return out;
+  }, [preview]);
+  const latestSpec = useRef<DeckSpec | null>(null);
+  latestSpec.current = spec;
+  const [inPlaceError, setInPlaceError] = useState<string | null>(null);
+  const onHeadNow = !!deck && !!revisionId && revisionId === deck.activeRevisionId && specRevisionId === revisionId;
+  const inPlace = useDeckInPlaceEdits({
+    tenant, deckId, head: onHeadNow ? revisionId : null, savedSpec, latestSpec: () => latestSpec.current, adoptRevision, onError: setInPlaceError,
+    setDraft: next => { latestSpec.current = next; setSpec(next); },
+  });
   const [layoutPreviews, setLayoutPreviews] = useState<Record<string, string>>({});
   const [reports, setReports] = useState<DeckChartReport[]>([]);
+  const [pickers, setPickers] = useState<{ icons?: DeckIconSource; graphics?: DeckGraphicSource }>({});
   useEffect(() => {
     const ctl = new AbortController();
     // Previews only make the gallery nicer: without them it draws the library's schematics.
-    listDeckLayouts(tenant, ctl.signal).then(out => setLayoutPreviews(layoutPreviewMap(out.layouts ?? []))).catch(() => undefined);
+    // The same answer carries the engine's icon and graphic catalogues for the pickers in the side pane.
+    listDeckLayouts(tenant, ctl.signal).then(out => {
+      setLayoutPreviews(layoutPreviewMap(out.layouts ?? []));
+      setPickers({
+        ...(out.icons ? { icons: { items: out.icons.items, icons: out.icons.paths } } : {}),
+        ...(out.graphics ? { graphics: { items: out.graphics.items } } : {}),
+      });
+    }).catch(() => undefined);
     listChartReports(tenant, deckId, ctl.signal).then(out => setReports(out.reports ?? [])).catch(() => undefined);
     return () => ctl.abort();
   }, [tenant, deckId]);
@@ -196,6 +221,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const notices = (
     <>
       {extras.notices}
+      {inPlaceError && !conflict && <InlineAlert tone="warning" data-testid={`${testIdPrefix}-inplace-error`}>{inPlaceError}</InlineAlert>}
       {saveError && !conflict && <Banner variant="error" title="Presentation could not be saved" data-testid={`${testIdPrefix}-save-error`}>{saveError}</Banner>}
       {refusal && !presenting && <InlineAlert tone="warning" data-testid={`${testIdPrefix}-save-blocked`}>{`Before saving: ${refusal}`}</InlineAlert>}
       {downloadError && <Banner variant="error" title="Presentation could not be downloaded" data-testid={`${testIdPrefix}-download-error`}>{downloadError}</Banner>}
@@ -230,7 +256,20 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   // A slide added in the editor cites the server's placeholder (`example:unsourced`), as `add_slide` does:
   // Save stays on, the preview draws it, and the findings line asks for the real source.
   // A new slide also starts with its layout's placeholder title ("Timeline", "Key figures"); the editor focuses and selects it.
-  const editSpec = (next: DeckSpec) => setSpec(withPlaceholderTitles(spec, withPlaceholderSources(spec, next)));
+  const editSpec = (next: DeckSpec) => {
+    const out = withPlaceholderTitles(spec, withPlaceholderSources(spec, next));
+    // The region and row callbacks run right after this, before React renders: they read the draft from here.
+    latestSpec.current = out;
+    setSpec(out);
+    const decorated = decorationChange(spec, out);
+    if (decorated) inPlace.onDecoration(decorated.slideId, decorated.decoration);
+  };
+  const changeStyle = (style: DeckStyleName) => {
+    const next = { ...spec, theme: withDeckStyle(spec.theme, style, tenant) };
+    latestSpec.current = next;
+    setSpec(next);
+    inPlace.onStyle(style);
+  };
   // The preview's findings marked on each slide's thumbnail: overflow and unfinished as warnings, example sources as info.
   const slideFindings = deckSlideFindings(warnings, spec);
   const fileActions = (
@@ -324,6 +363,19 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         layoutGalleryOpen={showLayouts}
         onLayoutGalleryOpenChange={setLayoutsOpen}
         slideFindings={slideFindings}
+        // Edit in place (ui-components 2.550.0): click a title, card, icon or figure on the slide; pickers sit in the side pane.
+        slideRegions={slideRegions ?? NO_REGIONS}
+        slideSize={{ width: 960, height: 540 }}
+        onRegionEdit={inPlace.onRegionEdit}
+        onRowAdd={(slideId, list, afterIndex) => inPlace.onRowChange(slideId, list, afterIndex + 1)}
+        onRowRemove={(slideId, list) => inPlace.onRowChange(slideId, list)}
+        onRowMove={(slideId, list) => inPlace.onRowChange(slideId, list)}
+        {...(pickers.icons ? { icons: pickers.icons } : {})}
+        {...(pickers.graphics ? { graphics: pickers.graphics } : {})}
+        // No asset store yet: the picture layouts stay out of the gallery and the Layout menu.
+        hiddenLayouts={IMAGE_LAYOUTS}
+        deckStyle={deckStyleOf(spec.theme)}
+        onDeckStyleChange={style => changeStyle(style as DeckStyleName)}
         readOnly={cannotEdit}
         slideViewers={collab.presence.slideViewers}
         selectSlideRequest={collab.selectSlideRequest}

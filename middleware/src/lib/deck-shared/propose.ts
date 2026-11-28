@@ -238,7 +238,7 @@ export async function proposeDeckOperations(o: ProposeOptions): Promise<Result<P
     instruction: body.instruction.trim(), ...(slideId ? { slideId } : {}),
     outline: deckOutline(base.spec, apply.tenant, base.lockedSlideIds),
     schema: {
-      maxOperations: MAX_DECK_OPERATIONS, kinds: DECK_OPERATION_KINDS, layouts: SLIDE_LAYOUTS, styles: DECK_STYLES,
+      maxOperations: MAX_DECK_OPERATIONS, kinds: DECK_OPERATION_KINDS.filter((k) => k !== 'set_path'), layouts: SLIDE_LAYOUTS, styles: DECK_STYLES,
       themes: [...Object.keys(BUILTIN_THEMES), `{ ref: '${apply.tenant}' }`], emphases: DECK_EMPHASES, placements: DECK_DECORATION_PLACEMENTS,
       graphics: GRAPHIC_NAMES, reports: (o.reports ?? []).map((r) => ({ id: r.id, description: r.description })),
     },

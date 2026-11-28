@@ -28,6 +28,10 @@ export interface DeckDocumentOptions<D> {
   followLatest?: boolean;
 }
 
+/** JSON with object keys sorted, so two specs that differ only in key order compare equal. */
+const canonical = (value: unknown): string => JSON.stringify(value, (_k, v: unknown) => (v && typeof v === 'object' && !Array.isArray(v)
+  ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
+
 export function useDeckDocument<D extends DeckDocumentShape>(deckId: string, api: DeckDocumentApi<D>, options: DeckDocumentOptions<D> = {}) {
   const [deck, setDeck] = useState<D | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -164,14 +168,26 @@ export function useDeckDocument<D extends DeckDocumentShape>(deckId: string, api
     void reload().then((next) => { if (next) setRevisionId(openRevisionId(next)); });
   }, [reload]);
 
+  /**
+   * A revision written for this editor (an in-place edit sent as an operation): open it as the saved base. The draft on
+   * screen becomes the loaded spec when they agree; otherwise it stays, unsaved, on top of the new base.
+   */
+  const adoptRevision = useCallback(async (id: string) => {
+    const loaded = await apiRef.current.getSpec(deckId, id);
+    loadedSpecFor.current = id;
+    setSavedSpec(loaded); setRevisionId(id); setSpecError(null); setConflict(false);
+    setSpec((current) => (current && canonical(current) !== canonical(loaded) ? current : loaded));
+    void reload();
+  }, [deckId, reload]);
+
   const selectRevision = useCallback((id: string) => {
     if (deck?.revisions.find(r => r.id === id)?.specAvailable === false) return;
     setRevisionId(id); setSpecError(null);
   }, [deck?.revisions]);
 
   return {
-    deck, loadError, reload, revisionId, setRevisionId, spec, setSpec, specError, conflict, setConflict,
+    deck, loadError, reload, revisionId, setRevisionId, spec, savedSpec, setSpec, specError, conflict, setConflict,
     specRevisionId: loadedSpecFor.current,
-    dirty, dirtyRef, head, active, editorRevisions, save, loadLatest, selectRevision,
+    dirty, dirtyRef, head, active, editorRevisions, save, loadLatest, selectRevision, adoptRevision,
   };
 }

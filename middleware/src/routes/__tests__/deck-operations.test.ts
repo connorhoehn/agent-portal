@@ -249,6 +249,24 @@ describe('styles, decorations, emphasis and the designed layouts', () => {
     expect(placed.body.error).toMatch(/decoration\.placement must be one of corner, background, title/);
   });
 
+  it('set_path edits one field in place by its engine path, refuses a field the layout does not paint, and null clears', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const id = made.spec.slides[0]!.id;
+    let res = await ops(app, made.deckId, made.revisionId, [{ op: 'set_path', slideId: id, path: 'title', value: [{ text: 'Edited' }, { text: ' in place', emphasis: 'highlight' }] }]);
+    expect(res.status).toBe(201);
+    expect(res.body.summary).toBe('Edited title on slide 1.');
+    expect((await specOf(app, made.deckId, res.body.revision.id)).slides[0]!.title).toEqual([{ text: 'Edited' }, { text: ' in place', emphasis: 'highlight' }]);
+    const rid = res.body.revision.id;
+    const wrong = await ops(app, made.deckId, rid, [{ op: 'set_path', slideId: id, path: 'matrix.quadrants[0].text', value: 'x' }]);
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error).toMatch(/operation 1 \(set_path\): path matrix\.quadrants\[0\]\.text is not a field/);
+    expect((await ops(app, made.deckId, rid, [{ op: 'set_path', slideId: id, path: 'title' }])).status).toBe(400);
+    expect((await ops(app, made.deckId, rid, [{ op: 'set_path', slideId: id, path: 'title', value: '' }])).status).toBe(400);
+    res = await ops(app, made.deckId, rid, [{ op: 'set_path', slideId: id, path: 'title', value: 'Plain again' }]);
+    expect((await specOf(app, made.deckId, res.body.revision.id)).slides[0]!.title).toBe('Plain again');
+  });
+
   it('set_emphasis marks words of a title or a bullet, keeps the other runs, clears with null, and counts words', async () => {
     const app = as('sme');
     const made = await build(app);

@@ -5,7 +5,8 @@
 export interface DeckRevisionSummary { id: string; label: string; createdAt: string; producedBy: string; specAvailable?: false; unavailabilityReason?: string }
 
 export interface DeckPreviewOut {
-  slides: Array<{ id: string; svg: string; title?: string; generated?: boolean }>;
+  /** `regions`: the slide's editable fields and their boxes in stage points (realtime-modules `editableRegions`). */
+  slides: Array<{ id: string; svg: string; title?: string; generated?: boolean; regions?: Array<{ path: string; kind: string; box: { x: number; y: number; w: number; h: number }; value?: unknown }> }>;
   warnings: string[];
   /** The layout's measured findings (overflow, wrapped titles, crowding), also summarised in `warnings`. */
   findings?: Array<{ slideId: string; kind: string; region: string; detail: string; byPoints?: number }>;

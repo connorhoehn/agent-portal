@@ -97,7 +97,7 @@ export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckP
     ok: true,
     value: {
       slides: preview.slides.map((s) => ({
-        id: s.id, svg: s.svg, title: s.title, ...(s.id === SOURCES_SLIDE_ID ? { generated: true } : {}),
+        id: s.id, svg: s.svg, title: s.title, ...(s.regions ? { regions: s.regions } : {}), ...(s.id === SOURCES_SLIDE_ID ? { generated: true } : {}),
       })),
       warnings: [...(draft?.unfinished ?? []), ...preview.warnings, ...exampleSourceWarnings(valid.spec)],
       findings: preview.findings,

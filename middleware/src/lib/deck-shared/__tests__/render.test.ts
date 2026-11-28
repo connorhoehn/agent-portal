@@ -79,6 +79,17 @@ describe('the preview', () => {
     expect(preview.warnings.some((w) => /^Slide 1 \(b\) (bullet|body)/.test(w))).toBe(true);
   });
 
+  it('each spec slide carries its editable regions in stage points, rounded, and the Sources slide none', () => {
+    const preview = renderPreview(deck('plain'), builtinTheme('plain'));
+    const first = preview.slides[0]!;
+    const title = first.regions?.find((r) => r.path === 'title');
+    expect(title?.kind).toMatch(/^(text|runs)$/);
+    expect(title!.box.x).toBeGreaterThanOrEqual(0);
+    expect(title!.box.x + title!.box.w).toBeLessThanOrEqual(960);
+    for (const r of first.regions!) for (const v of Object.values(r.box)) expect(Math.round(v * 10)).toBe(v * 10);
+    expect(preview.slides.find((s) => s.id === 'sources')?.regions).toBeUndefined();
+  });
+
   it('each slide is a stage-sized SVG wrapping one PNG painted with the bundled fonts, never a font family name', () => {
     const preview = renderPreview(deck('plain'), builtinTheme('plain'));
     for (const slide of preview.slides) {

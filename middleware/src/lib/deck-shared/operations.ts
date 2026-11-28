@@ -16,7 +16,7 @@ import {
   MAX_PIE_SLICES, MAX_SLIDES, MAX_STORY_BULLETS, SLIDE_ID_PATTERN, THEME_REF_PATTERN, plainText, textRuns, validateDeckSpec,
   type DeckChart, type DeckDecorationPlacement, type DeckEmphasis, type DeckRun, type DeckSlide, type DeckSource, type DeckSpec, type DeckText, type SlideLayout,
 } from '@connorhoehn/realtime-modules/deck';
-import { BUILTIN_THEMES, DECK_STYLES, GRAPHIC_NAMES, isGraphicName } from '@connorhoehn/realtime-modules/deck/layout';
+import { BUILTIN_THEMES, DECK_STYLES, GRAPHIC_NAMES, isGraphicName, isEditablePath, setInDeck } from '@connorhoehn/realtime-modules/deck/layout';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { hostSpecErrors } from './host-rules.js';
 import { layoutSpec } from './render.js';
@@ -36,7 +36,7 @@ export const MAX_DECK_OPERATIONS = 10;
 
 export const DECK_OPERATION_KINDS = [
   'add_slide', 'remove_slide', 'move_slide', 'set_title', 'set_fields', 'change_layout', 'set_notes', 'set_theme', 'set_chart',
-  'set_style', 'set_decoration', 'set_emphasis',
+  'set_style', 'set_decoration', 'set_emphasis', 'set_path',
 ] as const;
 export type DeckOperationKind = typeof DECK_OPERATION_KINDS[number];
 
@@ -541,6 +541,25 @@ export async function planDeckOperations(input: ApplyOperationsInput): Promise<R
             touched.add(slide.id);
             const words = from === to ? `word ${String(from)}` : `words ${String(from)} to ${String(to)}`;
             phrases.push(`${e === null ? 'cleared the emphasis on' : `gave ${e} emphasis to`} ${words} of the ${bullet === null ? 'title' : `bullet ${bullet}`} on ${named(slide)}`);
+            break;
+          }
+          case 'set_path': {
+            // One field edited in place on the slide (a title, a card's text or icon, a table cell, the deck's subtitle),
+            // addressed by the engine's path grammar (realtime-modules 0.154.0 `editableRegions`); the whole deck is
+            // validated again below, like every other operation.
+            only(op, ['slideId', 'path', 'value']);
+            const slide = editable(op);
+            const path = str(op, 'path');
+            if (path !== 'deck.subtitle' && !isEditablePath(slide.layout, path)) throw new OpError(400, `path ${path} is not a field a '${slide.layout}' slide shows`);
+            // null clears an optional field (a card's icon: "No icon"); JSON has no undefined.
+            if (op['value'] === undefined) throw new OpError(400, 'value is required (null clears an optional field)');
+            const was = named(slide);
+            let next: DeckSpec;
+            try { next = setInDeck(spec, slide.id, path, op['value'] === null ? undefined : structuredClone(op['value'])); }
+            catch (error) { throw new OpError(400, error instanceof Error ? error.message : `path ${path} could not be set`); }
+            Object.assign(spec, next);
+            touched.add(slide.id);
+            phrases.push(`edited ${path} on ${was}`);
             break;
           }
         }
