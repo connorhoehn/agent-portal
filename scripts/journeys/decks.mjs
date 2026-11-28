@@ -177,6 +177,45 @@ async function headSpec(ctx, deckId) {
   const s = await jget(ctx, `/api/initiative-decks/${encodeURIComponent(deckId)}/revisions/${encodeURIComponent(rev)}/spec`);
   return { deck: d.body, rev, spec: s.body?.spec ?? s.body };
 }
+/** Save through the page and read the server's answer: a refusal fails the step, never "saved" on a 400. */
+async function saveDeck(page) {
+  const save = page.getByTestId(`${IP}-save`);
+  if (!(await save.isEnabled().catch(() => false))) return { ok: false, line: `Save is disabled (${(await save.getAttribute('title')) ?? 'no hint'})` };
+  const answer = page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/initiative-decks\/[^/]+\/revisions(\?|$)/.test(r.url()), { timeout: 20000 });
+  await save.click();
+  const res = await answer.catch(() => null);
+  if (!res) return { ok: false, line: 'Save posted nothing within 20 s' };
+  const body = await res.json().catch(() => null);
+  await sleep(1500);
+  const shown = squash(await page.getByTestId(`${IP}-save-error`).innerText().catch(() => ''));
+  if (!res.ok()) return { ok: false, line: `Save answered ${res.status()} (${JSON.stringify(body).slice(0, 200)}); the page shows "${shown}"` };
+  return { ok: true, line: `saved (${res.status()}, revision ${body?.id ?? body?.revision?.id ?? '?'})` };
+}
+/** Distinct strong colours in the stage's painted PNG (the slide as drawn), clustered so anti-aliasing does not count. */
+async function stageColours(page) {
+  return page.evaluate(async (t) => {
+    const src = document.querySelector(`[data-testid="${t}"]`)?.getAttribute('src') ?? '';
+    const text = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+    const png = (text.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/) ?? [])[1];
+    if (!png) return { error: 'the stage is not a painted PNG', colours: [] };
+    const img = new Image(); img.src = `data:image/png;base64,${png}`; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data; const counts = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      const [r, gg, b] = [d[i], d[i + 1], d[i + 2]]; const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+      if (mx - mn < 40) continue; // greys, white, black and the text: not a slice colour
+      const k = `${r >> 3},${gg >> 3},${b >> 3}`; counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const min = (c.width * c.height) * 0.002; const out = [];
+    for (const [k, n] of [...counts].sort((a, b) => b[1] - a[1])) {
+      if (n < min) break;
+      const rgb = k.split(',').map((v) => Number(v) * 8 + 4);
+      if (out.every((o) => Math.hypot(o.rgb[0] - rgb[0], o.rgb[1] - rgb[1], o.rgb[2] - rgb[2]) > 40)) out.push({ rgb, share: Math.round((n / (c.width * c.height)) * 1000) / 10 });
+    }
+    return { colours: out.map((o) => `#${o.rgb.map((v) => Math.min(255, v).toString(16).padStart(2, '0')).join('')} ${o.share}%`) };
+  }, `${IP}-editor-stage-image`);
+}
 async function openLayoutGallery(page) {
   await page.getByTestId(`${E}-toolbar-more`).click();
   await page.getByTestId(`${E}-toolbar-insert-all`).click();
@@ -216,21 +255,34 @@ await step('D1 new deck from a template', async () => {
   await page.getByRole('menuitem', { name: /Presentation/ }).click();
   await page.waitForURL(/\/iq\/decks\/new/, { timeout: 15000 });
   await page.getByTestId(`${IP}-new-submit`).waitFor({ timeout: 15000 });
-  const facts1 = await snap(page, 'D1a-new-facts', [1440], `${IP}-new`);
-  const choice = await page.getByText("From this initiative's facts", { exact: true }).count();
-  await page.getByText('From an example', { exact: true }).first().click();
+  // Both choices on arrival, no click: the facts row at the top and the gallery directly under it, at 1440 and 390.
   await page.locator(`button[data-testid^="${IP}-template-"]`).first().waitFor({ timeout: 15000 });
   await imagesLoaded(page, `[data-testid="${IP}-template"]`);
+  const arrival = [];
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 }); await sleep(600);
+    arrival.push(await page.evaluate((p) => {
+      const top = (id) => { const r = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect(); return r ? Math.round(r.top) : null; };
+      const tile = document.querySelector(`button[data-testid^="${p}-template-"]`)?.getBoundingClientRect();
+      const h1 = [...document.querySelectorAll('h1')].find((h) => h.offsetParent !== null && h.textContent.trim());
+      const cut = h1 ? (h1.scrollWidth > h1.clientWidth + 1 || [h1, ...h1.querySelectorAll('*')].some((e) => getComputedStyle(e).textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1)) : null;
+      return { width: innerWidth, facts: top(`${p}-new-facts`), examples: top(`${p}-new-examples`), tileTop: tile ? Math.round(tile.top) : null, vh: innerHeight, heading: h1?.textContent.trim() ?? null, headingCut: cut };
+    }, IP));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const facts1 = await snap(page, 'D1a-new-arrival', [1440, 390], `${IP}-new`);
+  const choice = await page.getByText("From this initiative's facts", { exact: true }).count();
+  const onArrival = arrival.every((a) => a.facts !== null && a.examples !== null && a.facts < a.examples && a.examples < a.vh && a.tileTop !== null && a.tileTop < a.vh && a.headingCut === false);
   const tiles = await page.evaluate((p) => [...document.querySelectorAll(`button[data-testid^="${p}-template-"]`)].filter((b) => !/-(strip|facts)$/.test(b.getAttribute('data-testid'))).map((b) => ({ id: b.getAttribute('data-testid'), imgs: [...b.querySelectorAll('img')].map((i) => i.complete && i.naturalWidth > 0) })), IP);
   const shots = await snap(page, 'D1b-new-examples', [1440, 900, 390], `${IP}-new`);
   const allLoaded = tiles.length > 0 && tiles.every((t) => t.imgs.length > 0 && t.imgs.every(Boolean));
   await page.getByTestId(`${IP}-new-title`).fill('Walk: status update');
   await page.getByTestId(`${IP}-template-status-update`).click();
-  await page.getByTestId(`${IP}-new-submit`).click();
+  await page.getByTestId(`${IP}-new-template-submit`).click();
   await page.waitForURL(/\/iq\/decks\/(?!new)[^/?#]+$/, { timeout: 30000 });
   deckId = deckIdOf(page); deckUrl = new URL(page.url()).pathname;
-  const ok = tiles.length === 5 && allLoaded && choice > 0 && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
-  return { ok, detail: `${tiles.length} templates, every tile preview loaded: ${allLoaded} (images per tile ${tiles.map((t) => t.imgs.length).join('/')}); "from this initiative's facts" choice shown: ${choice > 0}; landed on ${deckUrl}; ${fmt(shots)}` };
+  const ok = tiles.length === 5 && allLoaded && choice > 0 && onArrival && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
+  return { ok, detail: `${tiles.length} templates, every tile preview loaded: ${allLoaded} (images per tile ${tiles.map((t) => t.imgs.length).join('/')}); "from this initiative's facts" choice shown: ${choice > 0}; on arrival ${arrival.map((a) => `@${a.width}: facts row y ${a.facts}, gallery y ${a.examples}, first tile y ${a.tileTop} of ${a.vh}, heading "${a.heading}" truncated ${a.headingCut}`).join('; ')} (both visible without a click: ${onArrival}); landed on ${deckUrl}; ${fmt(shots)}` };
 });
 
 // D2 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -244,10 +296,22 @@ await step('D2 the editor on the new engine', async () => {
     return { stageTop: img ? Math.round(img.top) : null, stageBottom: img ? Math.round(img.bottom) : null, bannerHeight: ban ? Math.round(ban.height) : null, vh: innerHeight };
   }, IP);
   const shots = await snap(page, 'D2-editor', [1440, 900], `${E}`);
-  facts.push({ step: 'D2', geo, warn });
+  // The slide is the main thing: the assistant pane opens folded away, so the toolbar keeps Theme inline even at 900.
+  const room = [];
+  for (const width of [1440, 900]) {
+    await page.setViewportSize({ width, height: 900 }); await sleep(600);
+    room.push(await page.evaluate((e) => {
+      const theme = [...document.querySelectorAll(`[data-testid="${e}-toolbar"] [data-testid*="theme"], [data-testid="${e}-toolbar"] button[aria-label*="heme" i]`)].find((x) => x.offsetParent !== null);
+      const pane = document.querySelector('[data-testid="deck-assistant-pane"]');
+      return { width: innerWidth, theme: theme ? theme.getAttribute('data-testid') || theme.getAttribute('aria-label') : null, pane: !!pane && pane.offsetParent !== null };
+    }, E));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 }); await sleep(400);
+  const roomOk = room.every((r) => r.theme && !r.pane);
+  facts.push({ step: 'D2', geo, warn, room });
   const exampleWarn = /example/i.test(warn);
   const visible = geo.stageTop !== null && geo.stageBottom !== null && (Math.min(geo.stageBottom, geo.vh) - Math.max(geo.stageTop, 0)) >= 0.5 * (geo.stageBottom - geo.stageTop);
-  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && noDialogs(shots), detail: `stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
+  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && roomOk && noDialogs(shots), detail: `${room.map((r) => `@${r.width}: Theme in the toolbar ${r.theme ?? 'NO (in the overflow menu)'}, assistant pane open ${r.pane}`).join('; ')}; stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
 });
 
 // D3 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -265,12 +329,30 @@ await step('D3 the layout gallery, in place', async () => {
   const before = srcBefore;
   await page.getByTestId(`${E}-layout-gallery-timeline`).click();
   await page.getByTestId(`${E}-slide-timeline-date-2`).waitFor({ timeout: 10000 });
+  // The new slide starts with its layout's title, selected so typing replaces it; Save stays on.
+  await sleep(400);
+  const added = await page.evaluate((e) => {
+    const t = document.querySelector(`[data-testid="${e}-slide-title"]`);
+    return { title: t?.value ?? null, focused: document.activeElement === t, selected: t ? t.selectionStart === 0 && t.selectionEnd === t.value.length && t.value.length > 0 : false };
+  }, E);
+  const saveOnAdded = await page.getByTestId(`${IP}-save`).isEnabled().catch(() => false);
+  await stageLoaded(page, IP);
+  const a2 = await snap(page, 'D3a2-added-from-gallery', [1440], `${E}-stage`);
   for (const [i, [d, l]] of [['Jan', 'Plan'], ['Feb', 'Build'], ['Mar', 'Ship']].entries()) {
     await page.getByTestId(`${E}-slide-timeline-date-${i}`).fill(d);
     await page.getByTestId(`${E}-slide-timeline-label-${i}`).fill(l);
   }
   const changed = await waitSrcChange(page, IP, before);
   await stageLoaded(page, IP);
+  // The slide being edited stays in view while its form is filled.
+  const inView = await page.evaluate((p) => {
+    const r = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
+    if (!r || r.height === 0) return { fraction: 0 };
+    const seen = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+    const scrolled = [...document.querySelectorAll('*')].filter((e) => e.scrollTop > 0).map((e) => `${e.getAttribute('data-testid') ?? e.tagName.toLowerCase()}:${Math.round(e.scrollTop)}`).slice(0, 6);
+    return { fraction: Math.round((seen / r.height) * 100) / 100, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, scrolled, pageScroll: Math.round(document.scrollingElement?.scrollTop ?? 0) };
+  }, IP);
+  facts.push({ step: 'D3', added, saveOnAdded, inView });
   const t = await snap(page, 'D3b-timeline', [1440], `${E}-stage`);
   // key figures and table
   const more = [];
@@ -287,7 +369,9 @@ await step('D3 the layout gallery, in place', async () => {
   }
   const visualMissing = tiles.filter((x) => !x.visual || !x.loaded).map((x) => `${x.id}${x.visual ? '(img not loaded)' : '(none)'}`);
   facts.push({ step: 'D3', tiles });
-  return { ok: !state.form && !state.stage && dlg && tiles.length >= 13 && visualMissing.length === 0 && changed, detail: `gallery replaced the editor's main area (form present: ${state.form}, stage present: ${state.stage}); ${tiles.length} layout tiles, without a loaded preview: [${visualMissing.join(',')}]; ${fmt(shots)}; timeline filled, preview changed: ${changed}; ${more.join('; ')}` };
+  const addedOk = added.title === 'Timeline' && added.focused && added.selected && saveOnAdded;
+  const stageOk = inView.fraction >= 0.5;
+  return { ok: !state.form && !state.stage && dlg && tiles.length >= 13 && visualMissing.length === 0 && changed && addedOk && stageOk && noDialogs(a2), detail: `gallery replaced the editor's main area (form present: ${state.form}, stage present: ${state.stage}); ${tiles.length} layout tiles, without a loaded preview: [${visualMissing.join(',')}]; ${fmt(shots)}; the added slide's title "${added.title}" focused ${added.focused} selected ${added.selected}, Save enabled ${saveOnAdded}; timeline filled, preview changed: ${changed}; after typing the stage is ${Math.round(inView.fraction * 100)}% in view (y ${inView.top}-${inView.bottom} of ${inView.vh}; scrolled: ${(inView.scrolled ?? []).join(' ') || 'nothing'}; page scroll ${inView.pageScroll}); ${more.join('; ')}` };
 });
 
 // D4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -329,13 +413,31 @@ await step('D4 overflow is reported', async () => {
   return { ok: !!overflow && !!named && cleared && noDialogs([...shots, ...s2]), detail: `warning count ${countOf(warnBefore)} before and ${countOf(warn)} after adding ${slidesAfter - slidesBefore} slide(s) (the list is ${countOf(warnBefore) === countOf(warn) ? 'UNCHANGED, so it does not follow the edits' : 'updated'}); overflow sentence ${overflow ? `"${squash(overflow).slice(0, 160)}"` : 'NOT PRESENT (warnings: ' + warn.slice(0, 200) + ')'}; names slide ${slideNo}: ${!!named}; cleared after shortening: ${cleared}; ${fmt(shots)}` };
 });
 
+await step('D4c a draft the server would refuse says so plainly', async () => {
+  const title = page.getByTestId(`${E}-slide-title`);
+  const was = await title.inputValue();
+  await title.fill('');
+  await sleep(500);
+  const save = page.getByTestId(`${IP}-save`);
+  const disabled = !(await save.isEnabled().catch(() => true));
+  const hint = (await save.getAttribute('title')) ?? '';
+  const blocked = squash(await page.getByTestId(`${IP}-save-blocked`).innerText().catch(() => ''));
+  const position = squash(await page.getByTestId(`${E}-position`).innerText().catch(() => ''));
+  const n = (position.match(/Slide (\d+)/) ?? [])[1];
+  const shots = await snap(page, 'D4c-save-blocked', [1440], `${IP}-save-blocked`);
+  await title.fill(was || 'Overflow check');
+  await sleep(500);
+  const back = await save.isEnabled().catch(() => false);
+  const plain = new RegExp(`Slide ${n} needs a title`).test(blocked) && new RegExp(`Slide ${n} needs a title`).test(hint) && !/slides\[|DeckSpec|required/.test(`${blocked} ${hint}`);
+  return { ok: disabled && plain && back && noDialogs(shots), detail: `title cleared on slide ${n}: Save disabled ${disabled}, its hint "${hint}", the line above the stage "${blocked}"; title restored, Save enabled again ${back}` };
+});
+
 // D5 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 await step('D5a save, then fill a chart from a report', async () => {
-  const save = page.getByTestId(`${IP}-save`);
-  const saveEnabled = await save.isEnabled().catch(() => false);
-  let note = '';
-  if (saveEnabled) { await save.click(); await sleep(3500); note = 'saved'; }
-  else note = `Save is disabled (${(await save.getAttribute('title')) ?? 'no hint'}); the slides added in D3/D4 have no source`;
+  const saved = await saveDeck(page);
+  const saveEnabled = saved.ok;
+  const note = saved.line;
+  const titleBefore = (await headSpec(vera, deckId)).spec?.slides?.find((s) => s.id === 'chart')?.title ?? '';
   // Without a saved head the report panel cannot run; reload to the saved head and go on from there.
   await go(page, deckUrl);
   await stageLoaded(page, IP);
@@ -348,11 +450,13 @@ await step('D5a save, then fill a chart from a report', async () => {
   const panelVisible = panelRect.height > 40 && panelRect.top < panelRect.vh - 40 && panelRect.bottom > 0;
   const shotsA = await snap(page, 'D5a-report-panel', [1440], `${IP}-report-panel`);
   const sel = page.getByTestId(`${IP}-report-select`);
-  const wanted = (rep.body?.reports ?? []).find((r) => r.id === 'runs-by-outcome');
+  // Spend by initiative as a pie (the film's story): eight initiatives become the top five and "Other", six slices.
+  const wanted = (rep.body?.reports ?? []).find((r) => r.id === 'spend-by-initiative');
   const native = await sel.evaluate((e) => (e.tagName === 'SELECT' ? 'self' : e.querySelector('select') ? 'inner' : '')).catch(() => '');
-  if (native) await (native === 'self' ? sel : sel.locator('select')).selectOption('runs-by-outcome');
-  else { await sel.click(); await page.getByRole('option', { name: wanted?.description ?? /outcome/i }).first().click(); }
+  if (native) await (native === 'self' ? sel : sel.locator('select')).selectOption('spend-by-initiative');
+  else { await sel.click(); await page.getByRole('option', { name: wanted?.description ?? /spend per initiative/i }).first().click(); }
   await page.getByText('Pie', { exact: true }).first().click();
+  const titleNote = squash(await page.getByTestId(`${IP}-report-title-note`).innerText().catch(() => ''));
   await page.getByTestId(`${IP}-report-apply`).click();
   await sleep(4000);
   await stageLoaded(page, IP);
@@ -360,9 +464,19 @@ await step('D5a save, then fill a chart from a report', async () => {
   const h = await headSpec(vera, deckId);
   const chartSlide = (h.spec?.slides ?? []).find((s) => s.id === 'chart');
   const cites = JSON.stringify(chartSlide?.sources ?? []);
-  const ok = !!chartSlide?.chart && chartSlide.chart.kind === 'pie' && /report:runs-by-outcome/.test(cites);
-  facts.push({ step: 'D5', offered, saveEnabled, headRevision: h.rev, chart: chartSlide?.chart ?? null, sources: chartSlide?.sources ?? null });
-  return { ok: ok && noDialogs([...shotsA, ...shotsB]) && saveEnabled && panelVisible, detail: `${note}; reports offered to Vera: [${offered.join(', ')}]; head revision ${h.rev}: chart slide kind ${chartSlide?.chart?.kind ?? 'none'}, labels ${JSON.stringify(chartSlide?.chart?.labels ?? [])}, sources ${cites.slice(0, 160)}; report panel at y ${panelRect.top}-${panelRect.bottom} of ${panelRect.vh}px (on screen: ${panelVisible}); ${fmt(shotsA)}` };
+  const ok = !!chartSlide?.chart && chartSlide.chart.kind === 'pie' && /report:spend-by-initiative/.test(cites);
+  // The title follows the report, and the panel said so before Apply.
+  const titled = /^Spend by initiative, /.test(chartSlide?.title ?? '') && chartSlide.title !== titleBefore && titleNote.includes(`"${titleBefore}"`) && titleNote.includes(`"${chartSlide.title}"`);
+  // One plain "Figures read" line in the notes, no machine timestamp.
+  const notes = chartSlide?.notes ?? '';
+  const readLines = notes.split('\n').filter((l) => /^Figures read /.test(l));
+  const notesOk = readLines.length === 1 && /^Figures read \d{1,2} [A-Z][a-z]+ \d{4}, \d{2}:\d{2} UTC from the report "/.test(readLines[0]) && !/\d{4}-\d{2}-\d{2}T\d/.test(notes);
+  // Six slices, six colours, sampled from the painted slide.
+  const slices = chartSlide?.chart?.labels?.length ?? 0;
+  const painted = await stageColours(page);
+  const coloursOk = slices === 6 && painted.colours.length >= 6;
+  facts.push({ step: 'D5', offered, saveEnabled, headRevision: h.rev, chart: chartSlide?.chart ?? null, sources: chartSlide?.sources ?? null, title: chartSlide?.title, titleBefore, titleNote, notes, painted });
+  return { ok: ok && titled && notesOk && coloursOk && noDialogs([...shotsA, ...shotsB]) && saveEnabled && panelVisible, detail: `${note}; reports offered to Vera: [${offered.join(', ')}]; head revision ${h.rev}: chart slide kind ${chartSlide?.chart?.kind ?? 'none'}, labels ${JSON.stringify(chartSlide?.chart?.labels ?? [])}, sources ${cites.slice(0, 120)}; title "${titleBefore}" became "${chartSlide?.title}" (panel said: "${titleNote}") ok ${titled}; notes line "${readLines.join(' | ')}" ok ${notesOk}; ${slices} slices, painted colours [${painted.colours.join(', ')}]${painted.error ? ` (${painted.error})` : ''} ok ${coloursOk}; report panel at y ${panelRect.top}-${panelRect.bottom} of ${panelRect.vh}px (on screen: ${panelVisible}); ${fmt(shotsA)}` };
 });
 
 await step('D5b a persona without the budget read tier', async () => {
@@ -633,15 +747,14 @@ async function otherTenant(name, who, tenantId, newPath, prefix, editorPrefix, l
     try {
       const target = await lead(ctx);
       await go(p, `${newPath}${target}`);
-      await p.getByTestId(`${prefix}-new-submit`).waitFor({ timeout: 20000 });
-      const ex = p.getByText('From an example', { exact: true }).first();
-      if (await ex.count()) await ex.click();
+      // Both choices show on arrival (no click): the example gallery carries its own create button.
+      await p.getByTestId(`${prefix}-new-template-submit`).waitFor({ timeout: 20000 });
       await p.locator(`button[data-testid^="${prefix}-template-"]`).first().waitFor({ timeout: 15000 });
       await imagesLoaded(p, `[data-testid="${prefix}-template"]`);
       const shots = await snap(p, `D10-${name.toLowerCase().replace(/[^a-z]+/g, '-')}-new`, [1440], `${prefix}-new`);
       await p.getByTestId(`${prefix}-new-title`).fill(`Walk: ${name}`);
       await p.locator(`button[data-testid^="${prefix}-template-"]`).first().click();
-      await p.getByTestId(`${prefix}-new-submit`).click();
+      await p.getByTestId(`${prefix}-new-template-submit`).click();
       await p.waitForURL(/\/decks\/(?!new)[^/?#]+$/, { timeout: 30000 });
       await p.getByTestId(`${editorPrefix}-editor`).waitFor({ timeout: 30000 });
       await stageLoaded(p, editorPrefix);
