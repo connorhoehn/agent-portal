@@ -46,7 +46,7 @@ export const PAYLOAD_FIELDS: readonly string[] = [...new Set(Object.values(LAYOU
  */
 export const BULLET_LAYOUTS: readonly SlideLayout[] = ['title', 'section', 'bullets', 'two-column', 'big-number', 'image-text', 'image-full'];
 
-export const UNSOURCED_SOURCE: DeckSource = { documentId: 'example:unsourced', title: 'Needs a source: this slide was added by an edit and cites nothing yet' };
+export const UNSOURCED_SOURCE: DeckSource = { documentId: 'example:unsourced', documentLabel: 'Needs a source', title: 'Needs a source: this slide was added by an edit and cites nothing yet' };
 
 /**
  * Starting content for a slide added without its layout's payload. A chart has

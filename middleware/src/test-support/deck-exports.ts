@@ -21,10 +21,10 @@ export function pdfPageCount(bytes: Buffer): number {
 /**
  * Asserts the three formats of one revision. `get(query)` issues the GET for
  * `…/file` with `query` appended ('' or '?format=…'); `slides` is the deck's
- * own slide count (the Sources slide is added here).
+ * own slide count; `sourcesPages` the generated Sources pages (default 1; realtime-modules 0.155.0 pages a long list).
  */
-export async function expectDeckExports(get: (query: string) => Test, slides: number): Promise<void> {
-  const pages = slides + 1;
+export async function expectDeckExports(get: (query: string) => Test, slides: number, sourcesPages = 1): Promise<void> {
+  const pages = slides + sourcesPages;
 
   const pptx = await get('').buffer(true).parse(binary);
   expect(pptx.status).toBe(200);

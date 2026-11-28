@@ -99,7 +99,7 @@ export function buildConversationDeckFacts(src: ConversationDeckSource): DeckFac
   const first = lines[0];
   const last = lines[lines.length - 1];
   const period = first && last ? (day(first.at) === day(last.at) ? day(first.at) : `${day(first.at)} to ${day(last.at)}`) : 'no messages';
-  const pageSources: DeckSource[] = pages.map(p => ({ documentId: `${PAGE_SOURCE_PREFIX}${p.kind}:${p.id}`.slice(0, 200), title: p.unavailable ? 'Page no longer available to you' : clip(`${p.title}${p.trail ? ` — ${p.trail}` : ''}`, 160) }));
+  const pageSources: DeckSource[] = pages.map(p => ({ documentId: `${PAGE_SOURCE_PREFIX}${p.kind}:${p.id}`.slice(0, 200), documentLabel: p.unavailable ? 'Page no longer available to you' : clip(p.title, 160), title: p.unavailable ? 'Page no longer available to you' : clip(`${p.title}${p.trail ? ` — ${p.trail}` : ''}`, 160) }));
   const edgeSources = first && last ? [first, last].filter((l, i, a) => a.indexOf(l) === i).map(messageSource) : [];
 
   // 1. Title — cites the thread's first and last message (and the pages).

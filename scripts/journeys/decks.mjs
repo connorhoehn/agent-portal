@@ -192,8 +192,8 @@ async function saveDeck(page) {
   return { ok: true, line: `saved (${res.status()}, revision ${body?.id ?? body?.revision?.id ?? '?'})` };
 }
 /** Distinct strong colours in the stage's painted PNG (the slide as drawn), clustered so anti-aliasing does not count. */
-async function stageColours(page) {
-  return page.evaluate(async (t) => {
+async function stageColours(page, minShare = 0.002) {
+  return page.evaluate(async ([t, minShare]) => {
     const src = document.querySelector(`[data-testid="${t}"]`)?.getAttribute('src') ?? '';
     const text = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
     const png = (text.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/) ?? [])[1];
@@ -207,14 +207,14 @@ async function stageColours(page) {
       if (mx - mn < 40) continue; // greys, white, black and the text: not a slice colour
       const k = `${r >> 3},${gg >> 3},${b >> 3}`; counts.set(k, (counts.get(k) ?? 0) + 1);
     }
-    const min = (c.width * c.height) * 0.002; const out = [];
+    const min = (c.width * c.height) * minShare; const out = [];
     for (const [k, n] of [...counts].sort((a, b) => b[1] - a[1])) {
       if (n < min) break;
       const rgb = k.split(',').map((v) => Number(v) * 8 + 4);
       if (out.every((o) => Math.hypot(o.rgb[0] - rgb[0], o.rgb[1] - rgb[1], o.rgb[2] - rgb[2]) > 40)) out.push({ rgb, share: Math.round((n / (c.width * c.height)) * 1000) / 10 });
     }
     return { colours: out.map((o) => `#${o.rgb.map((v) => Math.min(255, v).toString(16).padStart(2, '0')).join('')} ${o.share}%`) };
-  }, `${IP}-editor-stage-image`);
+  }, [`${IP}-editor-stage-image`, minShare]);
 }
 async function openLayoutGallery(page) {
   // With the toolbar's full width (the assistant pane closed) "All layouts" may sit in the toolbar, not under ⋯.
@@ -559,7 +559,8 @@ await step('D5a save, then fill a chart from a report', async () => {
   const notesOk = readLines.length === 1 && /^Figures read \d{1,2} [A-Z][a-z]+ \d{4}, \d{2}:\d{2} UTC from the report "/.test(readLines[0]) && !/\d{4}-\d{2}-\d{2}T\d/.test(notes);
   // Six slices, six colours, sampled from the painted slide.
   const slices = chartSlide?.chart?.labels?.length ?? 0;
-  const painted = await stageColours(page);
+  // A pie on a kpi slide is small: its slices are judged at a tenth of the share a full chart slide needs.
+  const painted = await stageColours(page, chartSlide?.layout === "chart" ? 0.002 : 0.0002);
   const coloursOk = slices === 6 && painted.colours.length >= 6;
   facts.push({ step: 'D5', offered, saveEnabled, headRevision: h.rev, chart: chartSlide?.chart ?? null, sources: chartSlide?.sources ?? null, title: chartSlide?.title, titleBefore, titleNote, notes, painted });
   return { ok: ok && titled && notesOk && coloursOk && noDialogs([...shotsA, ...shotsB]) && saveEnabled && panelVisible, detail: `${note}; reports offered to Vera: [${offered.join(', ')}]; head revision ${h.rev}: chart slide kind ${chartSlide?.chart?.kind ?? 'none'}, labels ${JSON.stringify(chartSlide?.chart?.labels ?? [])}, sources ${cites.slice(0, 120)}; title "${titleBefore}" became "${chartSlide?.title}" (panel said: "${titleNote}") ok ${titled}; notes line "${readLines.join(' | ')}" ok ${notesOk}; ${slices} slices, painted colours [${painted.colours.join(', ')}]${painted.error ? ` (${painted.error})` : ''} ok ${coloursOk}; report panel at y ${panelRect.top}-${panelRect.bottom} of ${panelRect.vh}px (on screen: ${panelVisible}); ${fmt(shotsA)}` };
@@ -910,10 +911,13 @@ await step('D12a clicking a slide title opens an editor on its box', async () =>
   const ed = page.getByTestId(`${R}-editor`);
   await ed.waitFor({ timeout: 8000 });
   const eb = await rectOf(ed);
+  // How the editor draws its words: a library defect, if any, is recorded here (2.550.0 draws them white on white).
+  const look = await ed.evaluate((e) => { const c = getComputedStyle(e); return { color: c.color, background: c.backgroundColor, fontSize: c.fontSize, value: e.value }; });
+  facts.push({ step: 'D12a', look });
   const off = Math.max(Math.abs(eb.x - box.x), Math.abs(eb.y - box.y), Math.abs(eb.w - box.w));
   const shots = await snap(page, 'D12a-title-editor', [1440], `${R}-editor`);
   await noteDialogs();
-  return { ok: off <= 6 && noDialogs(shots), detail: `title region at ${JSON.stringify(box)}, editor at ${JSON.stringify(eb)} (largest offset ${off}px, within 6: ${off <= 6}); ${fmt(shots)}` };
+  return { ok: off <= 6 && noDialogs(shots), detail: `title region at ${JSON.stringify(box)}, editor at ${JSON.stringify(eb)} (largest offset ${off}px, within 6: ${off <= 6}); editor text ${look.color} on ${look.background} at ${look.fontSize}, value "${look.value}"; ${fmt(shots)}` };
 });
 
 await step('D12b typing and Enter saves, and the preview updates', async () => {

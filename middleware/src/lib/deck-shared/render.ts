@@ -29,7 +29,7 @@ import { paintPng } from '@connorhoehn/realtime-modules/deck/paint-png';
 import { ByteLru } from './byte-lru.js';
 
 /** The installed engine (realtime-modules) version; part of every cache key. A test holds it to the installed package. */
-export const DECK_ENGINE_VERSION = '0.154.0';
+export const DECK_ENGINE_VERSION = '0.155.0';
 
 /** How long one render may take before the request is answered 503. */
 export const DECK_RENDER_BUDGET_MS = 20_000;

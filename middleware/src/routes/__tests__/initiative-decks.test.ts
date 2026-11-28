@@ -292,7 +292,11 @@ describe('initiative status deck — revisions, preview, download', () => {
     const made = await build(app);
     const preview = await request(app).post(`${BASE}/${made.deckId}/preview`).send({ spec: made.spec });
     expect(preview.status).toBe(200);
-    expect(preview.body.slides.length).toBe(made.spec.slides.length + 1); // + generated Sources slide
+    // + the generated Sources pages (realtime-modules 0.155.0 spreads a long list over sources, sources-2, …)
+    const generated = preview.body.slides.filter((s: { id: string; generated?: boolean }) => s.generated);
+    expect(generated.length).toBeGreaterThanOrEqual(1);
+    expect(generated.every((s: { id: string }) => /^sources(-\d+)?$/.test(s.id))).toBe(true);
+    expect(preview.body.slides.length).toBe(made.spec.slides.length + generated.length);
     const file = await request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file`)
       .buffer(true).parse((res, cb) => { const chunks: Buffer[] = []; res.on('data', (c: Buffer) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); });
     expect(file.status).toBe(200);
@@ -303,7 +307,7 @@ describe('initiative status deck — revisions, preview, download', () => {
     expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('presentationml');
     expect((await request(app).get(`${BASE}/${made.deckId}/revisions/irev-00000000-0000-0000-0000-000000000000/file`)).status).toBe(404);
     expect(made.spec.theme).toEqual({ ref: 'orgiq' });
-    await expectDeckExports((q) => request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file${q}`), made.spec.slides.length);
+    await expectDeckExports((q) => request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file${q}`), made.spec.slides.length, generated.length);
     expect((await request(app).get(`${BASE}/not-a-deck`)).status).toBe(404);
   });
 });

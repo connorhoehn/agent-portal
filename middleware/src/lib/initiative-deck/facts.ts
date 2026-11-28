@@ -86,8 +86,8 @@ export const statusLabel = (v: string | null | undefined, fallback: string): str
 
 export const isOpenItem = (i: Pick<WorkItem, 'status'>): boolean => i.status !== 'done' && i.status !== 'cancelled';
 
-const projectSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}`, title: clip(`Initiative ${p.name}`, 160) });
-const boardSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}:work-items`, title: clip(`${p.name} — work items`, 160) });
+const projectSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}`, documentLabel: clip(`${p.name} initiative`, 160), title: clip(`Initiative ${p.name}`, 160) });
+const boardSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}:work-items`, documentLabel: clip(`${p.name} work items`, 160), title: clip(`${p.name} — work items`, 160) });
 
 /**
  * `options.brief` (G55) is the requester's words and the sprint window they
@@ -219,8 +219,8 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       evidence: [], prose: 'none', maxProse: 0, factBullets, templateProse: [],
     }, {
       id: 'budget', layout: 'bullets', title: 'Budget and maintenance floor',
-      sources: [{ documentId: `initiative:${project.id}:budget`, title: clip(`${project.name} — budget ledger`, 160) },
-        { documentId: `initiative:${project.id}:maintenance-30d`, title: clip(`${project.name} — maintenance, 30 days`, 160) }],
+      sources: [{ documentId: `initiative:${project.id}:budget`, documentLabel: clip(`${project.name} budget ledger`, 160), title: clip(`${project.name} — budget ledger`, 160) },
+        { documentId: `initiative:${project.id}:maintenance-30d`, documentLabel: clip(`${project.name} maintenance, 30 days`, 160), title: clip(`${project.name} — maintenance, 30 days`, 160) }],
     }));
   }
 
@@ -233,7 +233,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       evidence: [], prose: 'none', maxProse: 0, factBullets: lines(rows, 'envelopes'), templateProse: [],
     }, {
       id: 'envelopes', layout: 'bullets', title: 'Sprint envelopes',
-      sources: [{ documentId: `initiative:${project.id}:grants`, title: clip(`${project.name} — sprint envelopes`, 160) }],
+      sources: [{ documentId: `initiative:${project.id}:grants`, documentLabel: clip(`${project.name} sprint envelopes`, 160), title: clip(`${project.name} — sprint envelopes`, 160) }],
     }));
   }
 
@@ -248,7 +248,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       templateProse: ['Decisions above are as recorded on the initiative.'],
     }, {
       id: 'decisions', layout: 'bullets', title: 'Decisions',
-      sources: [initSrc, ...decisions.slice(0, MAX_SOURCES_PER_SLIDE - 1).map((d) => ({ documentId: `decision:${d.id}`, title: clip(`Decision ${d.topic}`, 160) }))],
+      sources: [initSrc, ...decisions.slice(0, MAX_SOURCES_PER_SLIDE - 1).map((d) => ({ documentId: `decision:${d.id}`, documentLabel: clip(`Decision: ${d.topic}`, 160), title: clip(`Decision ${d.topic}`, 160) }))],
     }));
   }
 

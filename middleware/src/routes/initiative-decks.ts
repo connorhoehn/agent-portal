@@ -56,7 +56,7 @@ async function opsInput(id: string, viewer: decks.DeckViewer, req: Request) {
     tenant: 'orgiq', revisions: decks.initiativeDeckRevisions, lookup: () => decks.visibleDeck(id, viewer), deckId: id,
     sub: req.session?.sub ?? null, resolveChart: deckChartResolver(req, 'orgiq', { initiativeId: deck?.projectId ?? null }),
     // A slide added to an initiative's deck cites that initiative's record (finding 3 of the tour film).
-    ...(deck?.projectId ? { recordSource: { documentId: `initiative:${deck.projectId}`, title: 'The initiative record' } } : {}),
+    ...(deck?.projectId ? { recordSource: { documentId: `initiative:${deck.projectId}`, documentLabel: 'The initiative record', title: 'The initiative record' } } : {}),
   };
   return { input, projectId: deck?.projectId ?? null };
 }
