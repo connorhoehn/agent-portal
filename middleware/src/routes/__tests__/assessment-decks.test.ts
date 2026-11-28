@@ -42,7 +42,7 @@ import { mockDeckRunResult } from '../../providers/assessment-decks.js';
 import { assessmentDecksFixture, assessmentDeckRevisionsFixture } from '../../mock/assessment-decks.js';
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
-import { expectDeckExports } from '../../test-support/deck-exports.js';
+import { expectDeckExports, sourcesPages } from '../../test-support/deck-exports.js';
 import { DECK_TEMPLATES, SLIDE_LAYOUTS } from '../../lib/deck-shared/index.js';
 
 let restoreRelease: () => void;
@@ -117,9 +117,9 @@ describe('review decks — generation and reads', () => {
     const spec = (await request(app).get(`/api/assessment/decks/${deckId}/revisions/${detail.body.activeRevisionId}/spec`)).body as DeckSpec;
     const res = await request(app).post(`/api/assessment/decks/${deckId}/preview`).send({ spec });
     expect(res.status).toBe(200);
-    expect(res.body.slides).toHaveLength(spec.slides.length + 1);
-    expect(res.body.slides[0]).toEqual({ id: 'title', svg: expect.stringMatching(/^<svg/), title: spec.slides[0]!.title });
-    expect(res.body.slides.at(-1)).toMatchObject({ id: 'sources', generated: true });
+    expect(res.body.slides).toHaveLength(spec.slides.length + sourcesPages(spec, 'assessment'));
+    expect(res.body.slides[0]).toEqual({ id: 'title', svg: expect.stringMatching(/^<svg/), title: spec.slides[0]!.title, regions: expect.arrayContaining([expect.objectContaining({ path: 'title' })]) });
+    expect(res.body.slides.at(-1)).toMatchObject({ id: expect.stringMatching(/^sources(-\d+)?$/), generated: true });
     expect(Array.isArray(res.body.warnings)).toBe(true);
     // An unfinished draft (a slide citing nothing) still previews, and says what it needs; save keeps the rule.
     const draft = await request(app).post(`/api/assessment/decks/${deckId}/preview`).send({ spec: { title: 'x', slides: [{ id: 'a', layout: 'bullets', title: 't', bullets: ['b'], sources: [] }] } });
@@ -148,7 +148,7 @@ describe('review decks — generation and reads', () => {
     const rid = (await request(app).get(`/api/assessment/decks/${deckId}`)).body.activeRevisionId as string;
     const spec = (await request(app).get(`/api/assessment/decks/${deckId}/revisions/${rid}/spec`)).body as DeckSpec;
     expect(spec.theme).toEqual({ ref: 'assessment' });
-    await expectDeckExports((q) => request(app).get(`/api/assessment/decks/${deckId}/revisions/${rid}/file${q}`), spec.slides.length);
+    await expectDeckExports((q) => request(app).get(`/api/assessment/decks/${deckId}/revisions/${rid}/file${q}`), spec.slides.length, sourcesPages(spec, 'assessment'));
   });
 });
 

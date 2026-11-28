@@ -4,6 +4,14 @@
 
 import JSZip from 'jszip';
 import type { Test } from 'supertest';
+import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
+import { layoutSpec } from '../lib/deck-shared/render.js';
+import { resolveDeckTheme, type DeckHostTenant } from '../lib/deck-shared/themes.js';
+
+/** The generated Sources pages a deck lays out to (realtime-modules 0.155.0 spreads a long list over sources, sources-2, …). */
+export function sourcesPages(spec: DeckSpec, tenant: DeckHostTenant): number {
+  return layoutSpec(spec, resolveDeckTheme(spec.theme, tenant)).scenes.length - spec.slides.length;
+}
 
 /** supertest's parser for a binary body. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

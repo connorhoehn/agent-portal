@@ -27,7 +27,7 @@ import { deckTitleFrom, parseDeckArgs } from '../../lib/social-deck/args.js';
 import { buildConversationDeckFacts, topicChunks } from '../../lib/social-deck/facts.js';
 import { deckIdForRun } from '../../providers/social-decks.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
-import { expectDeckExports } from '../../test-support/deck-exports.js';
+import { expectDeckExports, sourcesPages } from '../../test-support/deck-exports.js';
 import type { Session } from '../../lib/session.js';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { spendEntries } from '../../mock/spend-ledger.js';
@@ -250,7 +250,7 @@ describe('a saved deck: who may read, edit and post', () => {
     const saved = (await getSpec('u-theo', deckId, latest)).body;
     expect(spec.theme).toEqual({ ref: 'social' });
     const token = await bearer('u-theo');
-    await expectDeckExports((q) => request(app).get(`/api/chat/decks/${deckId}/revisions/${latest}/file${q}`).set('Authorization', token), saved.slides.length);
+    await expectDeckExports((q) => request(app).get(`/api/chat/decks/${deckId}/revisions/${latest}/file${q}`).set('Authorization', token), saved.slides.length, sourcesPages(saved, 'social'));
   });
 
   it('a non-member, a removed member and a person without ViewSocial get a 404 / 403, never the deck', async () => {

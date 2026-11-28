@@ -44,7 +44,7 @@ import { agentcore } from '../../providers/index.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunStore, pendingFlowRuns } from '../../lib/flow-runs/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
-import { expectDeckExports } from '../../test-support/deck-exports.js';
+import { expectDeckExports, sourcesPages } from '../../test-support/deck-exports.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { mockHolds } from '../../providers/spend-holds.js';
@@ -201,7 +201,7 @@ describe('run report deck — revisions, preview, download', () => {
     const spec: DeckSpec = (await request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/${made.revisionId}/spec`)).body;
     const preview = await request(app).post(`/api/pipelines/decks/${made.deckId}/preview`).send({ spec });
     expect(preview.status).toBe(200);
-    expect(preview.body.slides.length).toBe(spec.slides.length + 1); // + generated Sources slide
+    expect(preview.body.slides.length).toBe(spec.slides.length + sourcesPages(spec, 'pipelines')); // + the generated Sources pages
     const file = await request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/${made.revisionId}/file`)
       .buffer(true).parse((res, cb) => { const chunks: Buffer[] = []; res.on('data', (c: Buffer) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks))); });
     expect(file.status).toBe(200);
@@ -211,7 +211,7 @@ describe('run report deck — revisions, preview, download', () => {
     expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('presentationml');
     expect((await request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/prev-00000000-0000-0000-0000-000000000000/file`)).status).toBe(404);
     expect(spec.theme).toEqual({ ref: 'pipelines' });
-    await expectDeckExports((q) => request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/${made.revisionId}/file${q}`), spec.slides.length);
+    await expectDeckExports((q) => request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/${made.revisionId}/file${q}`), spec.slides.length, sourcesPages(spec, 'pipelines'));
   });
 });
 

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-28T03:56:00.909Z",
-  "serverHandlerSha": "0674ab70f44ae8e8cf30f7a1a840ab66199b341bc1e653ccd447f222abf12fc7",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-11-28T05:01:03.616Z",
+  "serverHandlerSha": "03187992af346f6dac3be3ba6b3b304f75dfd16bda3aba52bbac7b859e8d76f0",
+  "baseUrl": "http://127.0.0.1:3013",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -1453,6 +1453,12 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/assessment/decks/:id/operations/proposal": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/assessment/decks/:id/preview": {
       "refused": {
         "rule": "unclassified",
@@ -2422,6 +2428,12 @@
         "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
       }
     },
+    "POST /api/chat/decks/:id/operations/proposal": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
     "POST /api/chat/decks/:id/post": {
       "refused": {
         "rule": "social-deck",
@@ -3127,6 +3139,12 @@
       }
     },
     "POST /api/initiative-decks/:id/operations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/initiative-decks/:id/operations/proposal": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
@@ -3997,6 +4015,12 @@
       ]
     },
     "POST /api/pipelines/decks/:id/operations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/pipelines/decks/:id/operations/proposal": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
