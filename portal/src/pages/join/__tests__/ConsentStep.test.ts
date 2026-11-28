@@ -76,3 +76,21 @@ test('Continue stays off until every question has an answer, then turns on', asy
   for (const part of PARTS) assert.equal(checked(group(all, part)), 1, `${part}: its one answer shown`);
   assert.equal(continueOff(all), false);
 });
+
+test('each radiogroup has an accessible name: its question, by aria-labelledby', async () => {
+  const { render } = await bundle();
+  const html = render({ recording: null, transcription: null, milo: null });
+  const groups = html.match(/<[a-z]+[^>]*role="radiogroup"[^>]*>/g) ?? [];
+  assert.equal(groups.length, 3, 'three radio groups');
+  for (const tag of groups) {
+    const label = /aria-label="([^"]+)"/.exec(tag)?.[1];
+    const by = /aria-labelledby="([^"]+)"/.exec(tag)?.[1];
+    assert.ok(label || by, `a named group: ${tag}`);
+    if (by) {
+      for (const id of by.split(' ')) {
+        const named = new RegExp(`id="${id}"[^>]*>([^<]+)<`).exec(html)?.[1]?.trim();
+        assert.ok(named && named.endsWith('?'), `${id} names the group with its question (${named})`);
+      }
+    }
+  }
+});

@@ -96,10 +96,12 @@ export function ConsentStep({ consents, onSaved, onLinkDead, onBack, onAdmitted 
               return (
                 <Stack gap="sm" key={part} data-testid={`join-consent-${part}`}>
                   {i > 0 && <Divider />}
-                  <T size="sm" weight="medium" as="p">{question}</T>
+                  {/* Not in a FormField, so the group is named by its question through aria-labelledby. */}
+                  <T size="sm" weight="medium" as="p" id={`join-consent-${part}-question`}>{question}</T>
                   {required.includes(part) && <T size="xs" tone="secondary" as="p" data-testid={`join-consent-${part}-required`}>{REQUIRED_LINE}</T>}
                   <RadioGroup<YesNo>
                     name={`consent-${part}`}
+                    aria-labelledby={`join-consent-${part}-question`}
                     orientation="horizontal"
                     value={asYesNo(answers[part])}
                     onChange={(v) => setAnswers((a) => choose(a, part, v === 'yes'))}
