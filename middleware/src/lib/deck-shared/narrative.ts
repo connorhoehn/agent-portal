@@ -25,7 +25,7 @@ import {
   MAX_BULLET_CHARS, MAX_NOTES_CHARS, validateDeckSpec,
   type DeckSlide, type DeckSpec,
 } from '@connorhoehn/realtime-modules/deck';
-import { checkConstraints, parseConstraints } from '@connorhoehn/realtime-modules/deck';
+import { checkConstraints, parseConstraints, plainText } from '@connorhoehn/realtime-modules/deck';
 import { NARRATIVE_KINDS, clip, slideWithProse, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from './plan.js';
 
 export interface SourceSpan { evidenceId: string; text: string }
@@ -166,9 +166,9 @@ export function mergeDraft(facts: DeckFacts, result: unknown, opts: { previous?:
  */
 export function applyFacts(slide: DeckSlide, plan: SlidePlan): DeckSlide | null {
   let prose: string[] = [];
-  if (plan.prose === 'bullets') prose = (slide.bullets ?? []).slice(plan.factBullets.length);
+  if (plan.prose === 'bullets') prose = (slide.bullets ?? []).slice(plan.factBullets.length).map((b) => plainText(b));
   else if (plan.prose === 'column') prose = (slide.columns?.[1] ?? []).slice(plan.excerptBullets?.length ?? 0);
-  const title = plan.kind === 'title' ? undefined : slide.title;
+  const title = plan.kind === 'title' ? undefined : plainText(slide.title);
   const out = slideWithProse(plan, prose, slide.notes, title);
   if (plan.prose === 'bullets' && !out.bullets?.length) return null;
   return out;
@@ -286,7 +286,7 @@ export function mockReviseResult(input: ReviseDeckInput, facts: DeckFacts): Reco
   const instruction = input.instruction.trim();
   const shorterTitle = /\btitle\b/i.test(instruction) && /\b(short|shorter|shorten)\b/i.test(instruction);
   if (shorterTitle && plan.kind !== 'title') {
-    const words = slide.title.split(/\s+/);
+    const words = plainText(slide.title).split(/\s+/);
     if (words.length > 1) slide.title = words.slice(0, -1).join(' ');
   } else if (plan.prose !== 'none') {
     const list = plan.prose === 'column' ? slide.columns![1] : (slide.bullets ??= []);
@@ -297,7 +297,7 @@ export function mockReviseResult(input: ReviseDeckInput, facts: DeckFacts): Reco
       // One prose bullet left: shorten it by a word rather than adding a note,
       // so a "tighten"/"shorter" instruction never grows the slide.
       const last = list.length - 1;
-      const words = (list[last] ?? '').split(/\s+/);
+      const words = plainText(list[last]).split(/\s+/);
       if (last >= fixed && words.length > 3) list[last] = words.slice(0, -1).join(' ');
     } else if (list.length - fixed < plan.maxProse) list.push(clip(`Reviewer note: ${instruction.replace(/\d+(?:\.\d+)?/g, '').replace(/\s+/g, ' ')}`));
   }

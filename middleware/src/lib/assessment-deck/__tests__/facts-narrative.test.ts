@@ -90,7 +90,7 @@ describe('facts', () => {
     expect(slide!.bullets).toHaveLength(na.length);
     for (const d of na) {
       const reason = source.team.exceptions.find((e) => e.dimension_id === d.id && e.status === 'approved')?.reason;
-      if (reason) expect(slide!.bullets!.some((b) => b.startsWith(`${d.title}: ${reason.slice(0, 20)}`))).toBe(true);
+      if (reason) expect(slide!.bullets!.some((b) => String(b).startsWith(`${d.title}: ${reason.slice(0, 20)}`))).toBe(true);
     }
   });
 });

@@ -1,7 +1,8 @@
 import type { PresentationQuestionContext } from '../lib/presentation-context.js';
 import type { MockResponse } from './responses.js';
+import { plainText, type DeckText } from '@connorhoehn/realtime-modules/deck';
 
-const text = (value: string): string => value.replace(/[\\`*_<>\[\]]/g, '\\$&');
+const text = (value: DeckText): string => plainText(value).replace(/[\\`*_<>\[\]]/g, '\\$&');
 
 /** Deterministic offline preview, not a fabricated model/retrieval result. */
 export function presentationQuestionPreview(raw: unknown): MockResponse | null {

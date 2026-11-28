@@ -495,7 +495,7 @@ describe('initiative status deck — a brief and its sprint window (G55)', () =>
     expect(spec.slides.find((s) => s.id === 'title')!.notes).toContain('Focus, in the requester\'s words: “progress this past sprint”.');
     // Every fact line is the record's, exactly as a deck without a brief states it.
     for (const id of ['summary', 'work-status', 'work-type', 'sprints', 'decisions']) {
-      const fixed = (s: DeckSpec) => (s.slides.find((x) => x.id === id)?.bullets ?? []).filter((b) => /\d/.test(b) && !b.startsWith('Evidence on file'));
+      const fixed = (s: DeckSpec) => (s.slides.find((x) => x.id === id)?.bullets ?? []).map(String).filter((b) => /\d/.test(b) && !b.startsWith('Evidence on file'));
       expect(fixed(spec)).toEqual(fixed(plain.spec));
     }
   });
