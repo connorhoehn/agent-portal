@@ -18,7 +18,10 @@ import {
 } from '@connorhoehn/realtime-modules/deck';
 import { BUILTIN_THEMES, DECK_STYLES, GRAPHIC_NAMES, isGraphicName } from '@connorhoehn/realtime-modules/deck/layout';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
+import { hostSpecErrors } from './host-rules.js';
 import { layoutSpec } from './render.js';
+
+export { hostSpecErrors };
 import { REPORT_NOTE_LINE } from './reports.js';
 import {
   BULLET_LAYOUTS, LAYOUT_PAYLOAD, LAYOUT_PAYLOADS, LAYOUT_TITLE, PAYLOAD_FIELDS, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE,
@@ -43,16 +46,6 @@ export function layoutFields(layout: SlideLayout): string[] {
   return ['eyebrow', ...(BULLET_LAYOUTS.includes(layout) ? ['bullets'] : []), ...LAYOUT_PAYLOADS[layout]];
 }
 
-/**
- * Host rules on top of the format (docs/deck-edit-operations.md, "Pictures"): the
- * server never fetches a picture from an address (no server-side fetching of
- * arbitrary URLs), so an image `url` is refused; an `assetId` is kept but
- * resolves to nothing until an asset store exists, so the slide shows the
- * engine's placeholder and its image-missing finding.
- */
-export function hostSpecErrors(spec: { slides: Array<{ id: string; image?: { url?: string } }> }): string[] {
-  return spec.slides.filter((s) => s.image?.url !== undefined).map((s) => `slide ${s.id}: image.url is not accepted; the server does not fetch pictures from addresses. Give image.assetId once pictures can be uploaded, or describe the picture in image.alt`);
-}
 
 /**
  * The documentId prefix of a placeholder citation: a template's example source

@@ -64,6 +64,8 @@ const h = makeDeckHandlers<decks.DeckViewer>({
     return applyDeckOperations({
       tenant: 'orgiq', revisions: decks.initiativeDeckRevisions, lookup: () => decks.visibleDeck(id, viewer), deckId: id, body,
       sub: req.session?.sub ?? null, resolveChart: deckChartResolver(req, 'orgiq', { initiativeId: deck?.projectId ?? null }),
+      // A slide added to an initiative's deck cites that initiative's record (finding 3 of the tour film).
+      ...(deck?.projectId ? { recordSource: { documentId: `initiative:${deck.projectId}`, title: 'The initiative record' } } : {}),
     });
   },
   chartReports: async (id, viewer, req) => (await decks.visibleDeck(id, viewer)) ? { reports: await listDeckReports(req, 'orgiq') } : null,

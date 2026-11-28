@@ -7,6 +7,7 @@
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
+import { hostSpecErrors } from './host-rules.js';
 import { MAX_SLIDES, SOURCES_SLIDE_ID } from '@connorhoehn/realtime-modules/deck';
 import { renderPreview, renderRevisionBytes, type DeckFileFormat } from './render.js';
 import { previewableDraft } from './draft.js';
@@ -47,6 +48,8 @@ export async function savePersonRevision<D extends DeckHead>(
   if (!revisions.isRevisionId(body.baseRevisionId)) return { ok: false, status: 400, reason: 'baseRevisionId must name a revision' };
   const valid = validateDeckSpec(body.spec);
   if (!valid.ok) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: valid.errors } };
+  const hostErrors = hostSpecErrors(valid.spec);
+  if (hostErrors.length) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: hostErrors } };
   let locked: string[] | undefined;
   if (body.lockedSlideIds !== undefined) {
     if (!Array.isArray(body.lockedSlideIds) || body.lockedSlideIds.some((id) => typeof id !== 'string' || !valid.spec.slides.some((s) => s.id === id))) {
