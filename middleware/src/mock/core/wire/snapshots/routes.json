@@ -2363,67 +2363,67 @@
     {
       "method": "GET",
       "path": "/api/initiative-decks",
-      "source": "src/routes/initiative-decks.ts:89"
+      "source": "src/routes/initiative-decks.ts:91"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id",
-      "source": "src/routes/initiative-decks.ts:97"
+      "source": "src/routes/initiative-decks.ts:99"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/chart-reports",
-      "source": "src/routes/initiative-decks.ts:108"
+      "source": "src/routes/initiative-decks.ts:110"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/operations",
-      "source": "src/routes/initiative-decks.ts:107"
-    },
-    {
-      "method": "POST",
-      "path": "/api/initiative-decks/:id/preview",
       "source": "src/routes/initiative-decks.ts:109"
     },
     {
       "method": "POST",
+      "path": "/api/initiative-decks/:id/preview",
+      "source": "src/routes/initiative-decks.ts:111"
+    },
+    {
+      "method": "POST",
       "path": "/api/initiative-decks/:id/revise",
-      "source": "src/routes/initiative-decks.ts:106"
+      "source": "src/routes/initiative-decks.ts:108"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/revisions",
-      "source": "src/routes/initiative-decks.ts:105"
+      "source": "src/routes/initiative-decks.ts:107"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/file",
-      "source": "src/routes/initiative-decks.ts:110"
+      "source": "src/routes/initiative-decks.ts:112"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/spec",
-      "source": "src/routes/initiative-decks.ts:103"
+      "source": "src/routes/initiative-decks.ts:105"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/deck-layouts",
-      "source": "src/routes/initiative-decks.ts:87"
+      "source": "src/routes/initiative-decks.ts:89"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/deck-templates",
-      "source": "src/routes/initiative-decks.ts:85"
+      "source": "src/routes/initiative-decks.ts:87"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/deck-templates/:templateId",
-      "source": "src/routes/initiative-decks.ts:86"
+      "source": "src/routes/initiative-decks.ts:88"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/projects/:projectId",
-      "source": "src/routes/initiative-decks.ts:72"
+      "source": "src/routes/initiative-decks.ts:74"
     },
     {
       "method": "GET",

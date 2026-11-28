@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-28T02:03:02.613Z",
-  "serverHandlerSha": "452221ce187a5ee0fe49f7075ffba5a5b1d83765c76cc236c890aaad19979bc9",
-  "baseUrl": "http://127.0.0.1:3011",
+  "capturedAt": "2026-11-28T03:56:00.909Z",
+  "serverHandlerSha": "0674ab70f44ae8e8cf30f7a1a840ab66199b341bc1e653ccd447f222abf12fc7",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -5606,10 +5606,8 @@
         "options.voices": "array",
         "options.voices[]": "object",
         "options.voices[].bestQuality": "boolean",
-        "options.voices[].custom": "boolean",
-        "options.voices[].id": "string",
         "options.voices[].label": "string",
-        "options.voices[].language": "null|string",
+        "options.voices[].language": "string",
         "options.voices[].name": "string",
         "options.voices[].presentation": "null|string",
         "options.voices[].region": "null|string",
